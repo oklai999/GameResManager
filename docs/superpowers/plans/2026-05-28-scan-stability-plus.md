@@ -125,13 +125,13 @@ Files:
 Files:
 - Modify: src-tauri/src/indexer.rs
 
-- [ ] Step 1: Add should_ignore_dir(path, settings). It compares directory file_name against settings.ignored_directory_names case-insensitively.
-- [ ] Step 2: Add asset_type_allowed(asset_type, extension, settings). PSD obeys include_psd; other image formats obey include_images.
-- [ ] Step 3: Add should_generate_thumbnail(extension, settings). png, jpg, jpeg, webp, bmp, gif return true; psd returns settings.generate_psd_thumbnails; all others false.
-- [ ] Step 4: Add scan_folder_with_settings(path, settings). It must use WalkDir iterator skip_current_dir for ignored directories and must keep old scan_folder for compatibility tests.
-- [ ] Step 5: Add tests: ignores_configured_directories, psd_thumbnail_generation_is_off_by_default, disabled_image_scan_skips_png.
-- [ ] Step 6: Run: cd I:\GameResManger\src-tauri; cargo test indexer. Expected: all indexer tests pass.
-- [ ] Step 7: Commit: git add src-tauri/src/indexer.rs; git commit -m "feat: add scan rules".
+- [x] Step 1: Add should_ignore_dir(path, settings). It compares directory file_name against settings.ignored_directory_names case-insensitively.
+- [x] Step 2: Add asset_type_allowed(asset_type, extension, settings). PSD obeys include_psd; other image formats obey include_images.
+- [x] Step 3: Add should_generate_thumbnail(extension, settings). png, jpg, jpeg, webp, bmp, gif return true; psd returns settings.generate_psd_thumbnails; all others false.
+- [x] Step 4: Add scan_folder_with_settings(path, settings). It must use WalkDir iterator skip_current_dir for ignored directories and must keep old scan_folder for compatibility tests.
+- [x] Step 5: Add tests: ignores_configured_directories, psd_thumbnail_generation_is_off_by_default, disabled_image_scan_skips_png.
+- [x] Step 6: Run: cd I:\GameResManger\src-tauri; cargo test indexer. Expected: all indexer tests pass.
+- [x] Step 7: Commit: git add src-tauri/src/indexer.rs; git commit -m "feat: add scan rules".
 
 ---
 
