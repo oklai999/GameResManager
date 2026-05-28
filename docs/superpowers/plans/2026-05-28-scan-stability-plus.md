@@ -179,16 +179,16 @@ Files:
 - Modify: src/App.tsx
 - Modify: src/styles.css
 
-- [ ] Step 1: Create ScanStatusBar. It shows status label, found, added, updated, unchanged, missing, skipped, and error_message.
-- [ ] Step 2: Update LibrarySidebar props to accept latestJobs and onCancelScan. If latestJobs[folder.id].status is running, show Cancel; otherwise show Scan.
-- [ ] Step 3: Update App state with latestJobs: Record<number, ScanJob | null>.
-- [ ] Step 4: After loadData loads folderList, call latestScanJob for each folder and store results.
-- [ ] Step 5: Replace old scanLibraryFolder call with startScan. Do not await scan completion in the click handler.
-- [ ] Step 6: Add polling every 1000 ms while any latest job is running; polling calls loadData.
-- [ ] Step 7: Render ScanStatusBar for each latest job above AssetGrid.
-- [ ] Step 8: Add CSS for scan-status running/completed/failed/cancelled.
-- [ ] Step 9: Run: cd I:\GameResManger; npm test; npm run build. Expected: tests and build pass.
-- [ ] Step 10: Commit: git add src/App.tsx src/components/LibrarySidebar.tsx src/components/ScanStatusBar.tsx src/styles.css; git commit -m "feat: show scan progress and cancellation".
+- [x] Step 1: Create ScanStatusBar. It shows status label, found, added, updated, unchanged, missing, skipped, and error_message.
+- [x] Step 2: Update LibrarySidebar props to accept latestJobs and onCancelScan. If latestJobs[folder.id].status is running, show Cancel; otherwise show Scan.
+- [x] Step 3: Update App state with latestJobs: Record<number, ScanJob | null>.
+- [x] Step 4: After loadData loads folderList, call latestScanJob for each folder and store results.
+- [x] Step 5: Replace old scanLibraryFolder call with startScan. Do not await scan completion in the click handler.
+- [x] Step 6: Add polling every 1000 ms while any latest job is running; polling calls loadData.
+- [x] Step 7: Render ScanStatusBar for each latest job above AssetGrid.
+- [x] Step 8: Add CSS for scan-status running/completed/failed/cancelled.
+- [x] Step 9: Run: cd I:\GameResManger; npm test; npm run build. Expected: tests and build pass.
+- [x] Step 10: Commit: git add src/App.tsx src/components/LibrarySidebar.tsx src/components/ScanStatusBar.tsx src/styles.css; git commit -m "feat: show scan progress and cancellation".
 
 ---
 

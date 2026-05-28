@@ -231,6 +231,69 @@ body {
   font-size: 13px;
 }
 
+.scan-status {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #1b2840;
+  color: #c5ccda;
+  font-size: 13px;
+}
+
+.scan-status.running {
+  border-left: 3px solid #5b8def;
+}
+
+.scan-status.completed {
+  border-left: 3px solid #22c55e;
+}
+
+.scan-status.failed {
+  border-left: 3px solid #ef4444;
+}
+
+.scan-status.cancelled {
+  border-left: 3px solid #8f9aaf;
+}
+
+.scan-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.scan-status-label {
+  font-weight: 700;
+  color: #f4f7fb;
+}
+
+.scan-current-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+  font-size: 12px;
+  color: #8f9aaf;
+}
+
+.scan-status-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scan-error {
+  margin-top: 6px;
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.scan-btn.cancel {
+  background: #3f1a1a;
+  border-color: #7f2a2a;
+}
+
 .error-text {
   color: #ef4444;
   font-size: 12px;

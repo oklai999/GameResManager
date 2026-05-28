@@ -13,6 +13,8 @@ describe("LibrarySidebar", () => {
         onFilterChange={vi.fn()}
         onAddFolder={onAddFolder}
         onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        latestJobs={{}}
         error={null}
       />
     );
@@ -33,6 +35,8 @@ describe("LibrarySidebar", () => {
         onFilterChange={vi.fn()}
         onAddFolder={vi.fn()}
         onScanFolder={onScanFolder}
+        onCancelScan={vi.fn()}
+        latestJobs={{}}
         error={null}
       />
     );

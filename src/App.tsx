@@ -2,19 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   addLibraryFolder,
   applyTagToAssets,
+  cancelScan,
+  latestScanJob,
   listAssets,
   listAssetTags,
   listLibraryFolders,
   openAssetFile,
   revealAssetInFolder,
-  scanLibraryFolder,
   setAssetFavorite,
+  startScan,
 } from "./api/tauri";
 import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { LibrarySidebar } from "./components/LibrarySidebar";
+import { ScanStatusBar } from "./components/ScanStatusBar";
 import { SearchToolbar } from "./components/SearchToolbar";
-import type { Asset, LibraryFolder, ScanResult, SearchScope } from "./types/asset";
+import type { Asset, LibraryFolder, ScanJob, SearchScope } from "./types/asset";
 
 export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -24,7 +27,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>({ fileName: true, tag: true, note: true, path: false });
   const [error, setError] = useState<string | null>(null);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [latestJobs, setLatestJobs] = useState<Record<number, ScanJob | null>>({});
 
   const loadData = useCallback(async () => {
     try {
@@ -45,6 +48,15 @@ export default function App() {
       }));
       setAssets(assetsWithTags);
       setFolders(folderList);
+
+      const jobs: Record<number, ScanJob | null> = {};
+      await Promise.all(
+        folderList.map(async (folder) => {
+          jobs[folder.id] = await latestScanJob(folder.id);
+        })
+      );
+      setLatestJobs(jobs);
+
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -54,6 +66,15 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const hasRunning = Object.values(latestJobs).some((j) => j?.status === "running");
+    if (!hasRunning) return;
+    const interval = setInterval(() => {
+      loadData();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [latestJobs, loadData]);
 
   const filteredAssets = useMemo(() => {
     return assets.filter((asset) => {
@@ -90,14 +111,31 @@ export default function App() {
 
   const handleScanFolder = useCallback(async (folderId: number) => {
     try {
-      const result = await scanLibraryFolder(folderId);
-      setScanResult(result);
-      await loadData();
+      const job = await startScan(folderId);
+      setLatestJobs((prev) => ({ ...prev, [folderId]: job }));
       setError(null);
     } catch (e) {
       setError(String(e));
     }
-  }, [loadData]);
+  }, []);
+
+  const handleCancelScan = useCallback(async (jobId: number) => {
+    try {
+      await cancelScan(jobId);
+      setLatestJobs((prev) => {
+        const next = { ...prev };
+        for (const [folderId, job] of Object.entries(next)) {
+          if (job?.id === jobId) {
+            next[Number(folderId)] = { ...job, status: "cancelled" as const };
+          }
+        }
+        return next;
+      });
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
 
   const handleToggleFavorite = useCallback(async (asset: Asset) => {
     try {
@@ -129,15 +167,17 @@ export default function App() {
         onFilterChange={setActiveFilter}
         onAddFolder={handleAddFolder}
         onScanFolder={handleScanFolder}
+        onCancelScan={handleCancelScan}
+        latestJobs={latestJobs}
         error={error}
       />
       <section className="workspace">
         <SearchToolbar query={query} scope={scope} onQueryChange={setQuery} onScopeChange={setScope} />
-        {scanResult && (
-          <div className="scan-result">
-            扫描完成：发现 {scanResult.found}，新增 {scanResult.added}，更新 {scanResult.updated}，跳过 {scanResult.skipped}，缺失 {scanResult.missing}
-          </div>
-        )}
+        {Object.values(latestJobs)
+          .filter(Boolean)
+          .map((job) => (
+            <ScanStatusBar key={job!.id} job={job!} />
+          ))}
         <AssetGrid
           assets={filteredAssets}
           selectedIds={selectedIds}

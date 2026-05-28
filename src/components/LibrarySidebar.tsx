@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { LibraryFolder } from "../types/asset";
+import type { LibraryFolder, ScanJob } from "../types/asset";
 
 type Props = {
   folders: LibraryFolder[];
@@ -7,10 +7,12 @@ type Props = {
   onFilterChange: (filter: string) => void;
   onAddFolder: (name: string, path: string) => void;
   onScanFolder: (folderId: number) => void;
+  onCancelScan: (jobId: number) => void;
+  latestJobs: Record<number, ScanJob | null>;
   error: string | null;
 };
 
-export function LibrarySidebar({ folders, activeFilter, onFilterChange, onAddFolder, onScanFolder, error }: Props) {
+export function LibrarySidebar({ folders, activeFilter, onFilterChange, onAddFolder, onScanFolder, onCancelScan, latestJobs, error }: Props) {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
 
@@ -61,18 +63,32 @@ export function LibrarySidebar({ folders, activeFilter, onFilterChange, onAddFol
 
       <div className="panel-heading secondary">素材文件夹</div>
       <div className="folder-list">
-        {folders.map((folder) => (
-          <div className="folder-row" key={folder.id} title={folder.path}>
-            <span className="folder-name">{folder.name}</span>
-            <button
-              className="scan-btn"
-              onClick={() => onScanFolder(folder.id)}
-              title="扫描"
-            >
-              扫描
-            </button>
-          </div>
-        ))}
+        {folders.map((folder) => {
+          const job = latestJobs[folder.id];
+          const isRunning = job?.status === "running";
+          return (
+            <div className="folder-row" key={folder.id} title={folder.path}>
+              <span className="folder-name">{folder.name}</span>
+              {isRunning ? (
+                <button
+                  className="scan-btn cancel"
+                  onClick={() => onCancelScan(job!.id)}
+                  title="取消"
+                >
+                  取消
+                </button>
+              ) : (
+                <button
+                  className="scan-btn"
+                  onClick={() => onScanFolder(folder.id)}
+                  title="扫描"
+                >
+                  扫描
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </aside>
   );
