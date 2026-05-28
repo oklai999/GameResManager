@@ -1,0 +1,29 @@
+[package]
+name = "game-resource-manager"
+version = "0.1.0"
+description = "Local-first game asset manager"
+authors = ["oklai"]
+edition = "2021"
+
+[lib]
+name = "game_resource_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+image = "0.25"
+open = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "chrono", "migrate"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+walkdir = "2"
