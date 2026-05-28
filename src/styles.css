@@ -294,6 +294,44 @@ body {
   border-color: #7f2a2a;
 }
 
+.scan-settings-panel {
+  margin-top: 16px;
+}
+
+.scan-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.scan-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #c5ccda;
+  cursor: pointer;
+}
+
+.scan-setting-row input {
+  cursor: pointer;
+}
+
+.scan-setting-readonly {
+  margin-top: 10px;
+}
+
+.scan-ignored-dirs {
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 4px;
+  background: #171b25;
+  border: 1px solid #2d3447;
+  font-size: 12px;
+  color: #8f9aaf;
+  word-break: break-all;
+}
+
 .error-text {
   color: #ef4444;
   font-size: 12px;

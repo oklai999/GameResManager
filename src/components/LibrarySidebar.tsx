@@ -10,9 +10,10 @@ type Props = {
   onCancelScan: (jobId: number) => void;
   latestJobs: Record<number, ScanJob | null>;
   error: string | null;
+  settingsPanel?: React.ReactNode;
 };
 
-export function LibrarySidebar({ folders, activeFilter, onFilterChange, onAddFolder, onScanFolder, onCancelScan, latestJobs, error }: Props) {
+export function LibrarySidebar({ folders, activeFilter, onFilterChange, onAddFolder, onScanFolder, onCancelScan, latestJobs, error, settingsPanel }: Props) {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
 
@@ -90,6 +91,7 @@ export function LibrarySidebar({ folders, activeFilter, onFilterChange, onAddFol
           );
         })}
       </div>
+      {settingsPanel}
     </aside>
   );
 }

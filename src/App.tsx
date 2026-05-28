@@ -3,21 +3,24 @@ import {
   addLibraryFolder,
   applyTagToAssets,
   cancelScan,
+  getScanSettings,
   latestScanJob,
   listAssets,
   listAssetTags,
   listLibraryFolders,
   openAssetFile,
   revealAssetInFolder,
+  saveScanSettings,
   setAssetFavorite,
   startScan,
 } from "./api/tauri";
 import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { LibrarySidebar } from "./components/LibrarySidebar";
+import { ScanSettingsPanel } from "./components/ScanSettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
 import { SearchToolbar } from "./components/SearchToolbar";
-import type { Asset, LibraryFolder, ScanJob, SearchScope } from "./types/asset";
+import type { Asset, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
 
 export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -28,6 +31,7 @@ export default function App() {
   const [scope, setScope] = useState<SearchScope>({ fileName: true, tag: true, note: true, path: false });
   const [error, setError] = useState<string | null>(null);
   const [latestJobs, setLatestJobs] = useState<Record<number, ScanJob | null>>({});
+  const [scanSettings, setScanSettings] = useState<ScanSettings | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -75,6 +79,22 @@ export default function App() {
     }, 1000);
     return () => clearInterval(interval);
   }, [latestJobs, loadData]);
+
+  useEffect(() => {
+    getScanSettings()
+      .then(setScanSettings)
+      .catch((e) => setError(String(e)));
+  }, []);
+
+  const handleScanSettingsChange = useCallback(async (settings: ScanSettings) => {
+    setScanSettings(settings);
+    try {
+      await saveScanSettings(settings);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
 
   const filteredAssets = useMemo(() => {
     return assets.filter((asset) => {
@@ -170,6 +190,11 @@ export default function App() {
         onCancelScan={handleCancelScan}
         latestJobs={latestJobs}
         error={error}
+        settingsPanel={
+          scanSettings ? (
+            <ScanSettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
+          ) : null
+        }
       />
       <section className="workspace">
         <SearchToolbar query={query} scope={scope} onQueryChange={setQuery} onScopeChange={setScope} />

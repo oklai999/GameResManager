@@ -16,6 +16,7 @@ describe("LibrarySidebar", () => {
         onCancelScan={vi.fn()}
         latestJobs={{}}
         error={null}
+        settingsPanel={null}
       />
     );
 
@@ -38,6 +39,7 @@ describe("LibrarySidebar", () => {
         onCancelScan={vi.fn()}
         latestJobs={{}}
         error={null}
+        settingsPanel={null}
       />
     );
 

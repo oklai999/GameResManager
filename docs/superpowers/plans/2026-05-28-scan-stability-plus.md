@@ -199,12 +199,12 @@ Files:
 - Modify: src/App.tsx
 - Modify: src/styles.css
 
-- [ ] Step 1: Create ScanSettingsPanel with checkboxes for images, audio, video, fonts, models, spine, PSD indexing, and PSD thumbnails. Display ignored_directory_names as read-only text in this iteration.
-- [ ] Step 2: In App, load getScanSettings on mount.
-- [ ] Step 3: On checkbox change, optimistically update local state and call saveScanSettings.
-- [ ] Step 4: Render panel in the left sidebar area below folder list.
-- [ ] Step 5: Run: cd I:\GameResManger; npm run build. Expected: frontend build passes.
-- [ ] Step 6: Commit: git add src/App.tsx src/components/ScanSettingsPanel.tsx src/styles.css; git commit -m "feat: add scan settings panel".
+- [x] Step 1: Create ScanSettingsPanel with checkboxes for images, audio, video, fonts, models, spine, PSD indexing, and PSD thumbnails. Display ignored_directory_names as read-only text in this iteration.
+- [x] Step 2: In App, load getScanSettings on mount.
+- [x] Step 3: On checkbox change, optimistically update local state and call saveScanSettings.
+- [x] Step 4: Render panel in the left sidebar area below folder list.
+- [x] Step 5: Run: cd I:\GameResManger; npm run build. Expected: frontend build passes.
+- [x] Step 6: Commit: git add src/App.tsx src/components/ScanSettingsPanel.tsx src/styles.css; git commit -m "feat: add scan settings panel".
 
 ---
 
