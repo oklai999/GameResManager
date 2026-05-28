@@ -16,6 +16,8 @@ function makeAsset(id: number): Asset {
     width: 128,
     height: 128,
     thumbnail_path: null,
+    thumbnail_status: "none" as const,
+    thumbnail_error: null,
     note: "",
     is_favorite: false,
     is_missing: false,

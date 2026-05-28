@@ -5,6 +5,7 @@ mod indexer;
 mod models;
 mod scan_service;
 mod tags;
+mod thumbnail_queue;
 mod thumbnails;
 
 use std::path::PathBuf;
@@ -35,6 +36,7 @@ pub fn run() {
             }
             app.manage(ThumbnailDir(thumbnail_dir));
             app.manage(scan_service::ScanRuntime::default());
+            app.manage(thumbnail_queue::ThumbnailRuntime::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

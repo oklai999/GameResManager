@@ -72,12 +72,9 @@ pub async fn list_library_folders(db: &Db) -> anyhow::Result<Vec<LibraryFolder>>
 }
 
 pub async fn list_assets(db: &Db, limit: i64, offset: i64) -> anyhow::Result<Vec<Asset>> {
-    let rows = sqlx::query_as::<_, (
-        i64, i64, String, String, String, String, i64, String,
-        Option<i64>, Option<i64>, Option<String>, String, i64, i64, String, String
-    )>(
+    let rows = sqlx::query_as::<_, Asset>(
         "SELECT id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
-                modified_at, width, height, thumbnail_path, note, is_favorite, is_missing,
+                modified_at, width, height, thumbnail_path, thumbnail_status, thumbnail_error, note, is_favorite, is_missing,
                 created_at, updated_at
          FROM assets
          ORDER BY file_name
@@ -88,27 +85,7 @@ pub async fn list_assets(db: &Db, limit: i64, offset: i64) -> anyhow::Result<Vec
     .fetch_all(db)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Asset {
-            id: row.0,
-            library_folder_id: row.1,
-            absolute_path: row.2,
-            file_name: row.3,
-            extension: row.4,
-            asset_type: row.5,
-            file_size: row.6,
-            modified_at: row.7,
-            width: row.8,
-            height: row.9,
-            thumbnail_path: row.10,
-            note: row.11,
-            is_favorite: row.12 == 1,
-            is_missing: row.13 == 1,
-            created_at: row.14,
-            updated_at: row.15,
-        })
-        .collect())
+    Ok(rows)
 }
 
 use crate::models::{ScanJob, ScanJobStatus, ScanSettings};
@@ -492,6 +469,18 @@ pub async fn save_scan_settings(db: &Db, settings: &ScanSettings) -> anyhow::Res
     .bind(if settings.generate_psd_thumbnails { 1 } else { 0 })
     .bind(&settings.ignored_directory_names)
     .bind(&now)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn mark_thumbnail_failed(db: &Db, asset_id: i64, message: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE assets SET thumbnail_status = 'failed', thumbnail_error = ?1, updated_at = ?2 WHERE id = ?3"
+    )
+    .bind(message)
+    .bind(Utc::now().to_rfc3339())
+    .bind(asset_id)
     .execute(db)
     .await?;
     Ok(())

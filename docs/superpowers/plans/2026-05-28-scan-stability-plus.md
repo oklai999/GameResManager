@@ -218,14 +218,14 @@ Files:
 - Modify: src/types/asset.ts
 - Modify: src/components/AssetGrid.tsx
 
-- [ ] Step 1: Create ThumbnailRuntime with running flag. This task creates the state foundation; a full concurrent worker can be a later plan.
-- [ ] Step 2: Add mark_thumbnail_failed(db, asset_id, message) helper.
-- [ ] Step 3: Register module and manage ThumbnailRuntime in lib.rs.
-- [ ] Step 4: Add Asset fields thumbnail_status and thumbnail_error in Rust and TypeScript.
-- [ ] Step 5: Update db::list_assets SELECT and mapping to include thumbnail_status and thumbnail_error.
-- [ ] Step 6: Update AssetGrid fallback display: failed shows 缩略图失败, queued/generating shows 生成中, none shows extension.
-- [ ] Step 7: Run: cd I:\GameResManger; npm test; npm run build; cd src-tauri; cargo test; cargo check. Expected: all checks pass.
-- [ ] Step 8: Commit: git add src-tauri/src/thumbnail_queue.rs src-tauri/src/lib.rs src-tauri/src/models.rs src-tauri/src/db.rs src/types/asset.ts src/components/AssetGrid.tsx; git commit -m "feat: prepare thumbnail queue status".
+- [x] Step 1: Create ThumbnailRuntime with running flag. This task creates the state foundation; a full concurrent worker can be a later plan.
+- [x] Step 2: Add mark_thumbnail_failed(db, asset_id, message) helper.
+- [x] Step 3: Register module and manage ThumbnailRuntime in lib.rs.
+- [x] Step 4: Add Asset fields thumbnail_status and thumbnail_error in Rust and TypeScript.
+- [x] Step 5: Update db::list_assets SELECT and mapping to include thumbnail_status and thumbnail_error.
+- [x] Step 6: Update AssetGrid fallback display: failed shows 缩略图失败, queued/generating shows 生成中, none shows extension.
+- [x] Step 7: Run: cd I:\GameResManger; npm test; npm run build; cd src-tauri; cargo test; cargo check. Expected: all checks pass.
+- [x] Step 8: Commit: git add src-tauri/src/thumbnail_queue.rs src-tauri/src/lib.rs src-tauri/src/models.rs src-tauri/src/db.rs src/types/asset.ts src/components/AssetGrid.tsx; git commit -m "feat: prepare thumbnail queue status".
 
 ---
 

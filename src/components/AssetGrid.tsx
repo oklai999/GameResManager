@@ -31,6 +31,10 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
           <div className="thumb">
             {asset.thumbnail_path ? (
               <img src={convertFileSrc(asset.thumbnail_path)} alt="" />
+            ) : asset.thumbnail_status === "failed" ? (
+              <span>缩略图失败</span>
+            ) : asset.thumbnail_status === "queued" || asset.thumbnail_status === "generating" ? (
+              <span>生成中</span>
             ) : (
               <span>{asset.extension.toUpperCase()}</span>
             )}

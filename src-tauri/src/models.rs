@@ -36,7 +36,7 @@ pub struct LibraryFolder {
     pub is_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Asset {
     pub id: i64,
     pub library_folder_id: i64,
@@ -49,6 +49,8 @@ pub struct Asset {
     pub width: Option<i64>,
     pub height: Option<i64>,
     pub thumbnail_path: Option<String>,
+    pub thumbnail_status: String,
+    pub thumbnail_error: Option<String>,
     pub note: String,
     pub is_favorite: bool,
     pub is_missing: bool,

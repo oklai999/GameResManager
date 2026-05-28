@@ -10,6 +10,8 @@ export type Asset = {
   width: number | null;
   height: number | null;
   thumbnail_path: string | null;
+  thumbnail_status: "none" | "queued" | "generating" | "ready" | "failed";
+  thumbnail_error: string | null;
   note: string;
   is_favorite: boolean;
   is_missing: boolean;
