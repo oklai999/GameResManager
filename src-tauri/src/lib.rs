@@ -28,6 +28,7 @@ pub fn run() {
                     e
                 })
             })?;
+            let cleanup_pool = pool.clone();
             app.manage(pool);
 
             let thumbnail_dir = app_dir.join("thumbnails");
@@ -37,6 +38,13 @@ pub fn run() {
             app.manage(ThumbnailDir(thumbnail_dir));
             app.manage(scan_service::ScanRuntime::default());
             app.manage(thumbnail_queue::ThumbnailRuntime::default());
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = db::cleanup_old_scan_jobs(&cleanup_pool, 10).await {
+                    eprintln!("Failed to cleanup old scan jobs: {}", e);
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -47,7 +55,6 @@ pub fn run() {
             commands::open_asset_file,
             commands::reveal_asset_in_folder,
             commands::add_library_folder,
-            commands::scan_library_folder,
             commands::list_asset_tags,
             commands::start_scan,
             commands::cancel_scan,

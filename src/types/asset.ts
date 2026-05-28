@@ -36,14 +36,6 @@ export type SearchScope = {
   path: boolean;
 };
 
-export type ScanResult = {
-  found: number;
-  added: number;
-  updated: number;
-  skipped: number;
-  missing: number;
-};
-
 export type ScanJobStatus = "running" | "completed" | "failed" | "cancelled";
 
 export type ScanJob = {

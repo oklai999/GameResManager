@@ -264,7 +264,7 @@ pub async fn create_scan_job(db: &Db, folder_id: i64) -> anyhow::Result<ScanJob>
 pub async fn get_scan_job(db: &Db, job_id: i64) -> anyhow::Result<Option<ScanJob>> {
     let row = sqlx::query_as::<_, (
         i64, i64, String, String, Option<String>, Option<String>, i64,
-        i64, i64, i64, i64, i64, Option<String>, Option<String>, Option<String>
+        i64, i64, i64, i64, i64, Option<String>, Option<String>
     )>(
         "SELECT id, library_folder_id, status, started_at, finished_at, cancelled_at,
                 found_count, added_count, updated_count, unchanged_count, missing_count,
@@ -296,12 +296,44 @@ pub async fn get_scan_job(db: &Db, job_id: i64) -> anyhow::Result<Option<ScanJob
 pub async fn latest_scan_job_for_folder(db: &Db, folder_id: i64) -> anyhow::Result<Option<ScanJob>> {
     let row = sqlx::query_as::<_, (
         i64, i64, String, String, Option<String>, Option<String>, i64,
-        i64, i64, i64, i64, i64, Option<String>, Option<String>, Option<String>
+        i64, i64, i64, i64, i64, Option<String>, Option<String>
     )>(
         "SELECT id, library_folder_id, status, started_at, finished_at, cancelled_at,
                 found_count, added_count, updated_count, unchanged_count, missing_count,
                 skipped_count, current_path, error_message
          FROM scan_jobs WHERE library_folder_id = ?1 ORDER BY started_at DESC LIMIT 1"
+    )
+    .bind(folder_id)
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row.map(|r| ScanJob {
+        id: r.0,
+        library_folder_id: r.1,
+        status: r.2.parse().expect("invalid status"),
+        started_at: r.3,
+        finished_at: r.4,
+        cancelled_at: r.5,
+        found_count: r.6,
+        added_count: r.7,
+        updated_count: r.8,
+        unchanged_count: r.9,
+        missing_count: r.10,
+        skipped_count: r.11,
+        current_path: r.12,
+        error_message: r.13,
+    }))
+}
+
+pub async fn running_scan_job_for_folder(db: &Db, folder_id: i64) -> anyhow::Result<Option<ScanJob>> {
+    let row = sqlx::query_as::<_, (
+        i64, i64, String, String, Option<String>, Option<String>, i64,
+        i64, i64, i64, i64, i64, Option<String>, Option<String>
+    )>(
+        "SELECT id, library_folder_id, status, started_at, finished_at, cancelled_at,
+                found_count, added_count, updated_count, unchanged_count, missing_count,
+                skipped_count, current_path, error_message
+         FROM scan_jobs WHERE library_folder_id = ?1 AND status = 'running' ORDER BY started_at DESC LIMIT 1"
     )
     .bind(folder_id)
     .fetch_optional(db)
@@ -337,7 +369,9 @@ pub async fn update_scan_job_progress(
 ) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE scan_jobs SET found_count = ?1, added_count = ?2, updated_count = ?3,
-         unchanged_count = ?4, skipped_count = ?5, current_path = ?6 WHERE id = ?7"
+         unchanged_count = ?4, skipped_count = ?5,
+         current_path = CASE WHEN status = 'running' THEN ?6 ELSE current_path END
+         WHERE id = ?7"
     )
     .bind(found)
     .bind(added)
@@ -351,43 +385,82 @@ pub async fn update_scan_job_progress(
     Ok(())
 }
 
-pub async fn finish_scan_job(db: &Db, job_id: i64, missing: i64) -> anyhow::Result<()> {
+pub async fn finish_scan_job(db: &Db, job_id: i64, missing: i64) -> anyhow::Result<u64> {
     let now = Utc::now().to_rfc3339();
-    sqlx::query(
-        "UPDATE scan_jobs SET status = 'completed', finished_at = ?1, missing_count = ?2, current_path = NULL WHERE id = ?3"
+    let result = sqlx::query(
+        "UPDATE scan_jobs SET status = 'completed', finished_at = ?1, missing_count = ?2, current_path = NULL WHERE id = ?3 AND status = 'running'"
     )
     .bind(&now)
     .bind(missing)
     .bind(job_id)
     .execute(db)
     .await?;
-    Ok(())
+    if result.rows_affected() > 0 {
+        sqlx::query("DELETE FROM scan_seen_paths WHERE scan_job_id = ?1")
+            .bind(job_id)
+            .execute(db)
+            .await?;
+    }
+    Ok(result.rows_affected())
 }
 
-pub async fn fail_scan_job(db: &Db, job_id: i64, message: &str) -> anyhow::Result<()> {
+pub async fn fail_scan_job(db: &Db, job_id: i64, message: &str) -> anyhow::Result<u64> {
     let now = Utc::now().to_rfc3339();
-    sqlx::query(
-        "UPDATE scan_jobs SET status = 'failed', finished_at = ?1, error_message = ?2, current_path = NULL WHERE id = ?3"
+    let result = sqlx::query(
+        "UPDATE scan_jobs SET status = 'failed', finished_at = ?1, error_message = ?2, current_path = NULL WHERE id = ?3 AND status = 'running'"
     )
     .bind(&now)
     .bind(message)
     .bind(job_id)
     .execute(db)
     .await?;
-    Ok(())
+    if result.rows_affected() > 0 {
+        sqlx::query("DELETE FROM scan_seen_paths WHERE scan_job_id = ?1")
+            .bind(job_id)
+            .execute(db)
+            .await?;
+    }
+    Ok(result.rows_affected())
 }
 
-pub async fn cancel_scan_job(db: &Db, job_id: i64) -> anyhow::Result<()> {
+pub async fn cancel_scan_job(db: &Db, job_id: i64) -> anyhow::Result<u64> {
     let now = Utc::now().to_rfc3339();
-    sqlx::query(
-        "UPDATE scan_jobs SET status = 'cancelled', finished_at = ?1, cancelled_at = ?2, current_path = NULL WHERE id = ?3"
+    let result = sqlx::query(
+        "UPDATE scan_jobs SET status = 'cancelled', finished_at = ?1, cancelled_at = ?2, current_path = NULL WHERE id = ?3 AND status = 'running'"
     )
     .bind(&now)
     .bind(&now)
     .bind(job_id)
     .execute(db)
     .await?;
-    Ok(())
+    if result.rows_affected() > 0 {
+        sqlx::query("DELETE FROM scan_seen_paths WHERE scan_job_id = ?1")
+            .bind(job_id)
+            .execute(db)
+            .await?;
+    }
+    Ok(result.rows_affected())
+}
+
+pub async fn cleanup_old_scan_jobs(db: &Db, retain_per_folder: i64) -> anyhow::Result<u64> {
+    let result = sqlx::query(
+        "DELETE FROM scan_jobs WHERE id IN (
+            SELECT sj.id FROM scan_jobs sj
+            WHERE sj.status IN ('completed', 'cancelled', 'failed')
+              AND (
+                SELECT COUNT(*)
+                FROM scan_jobs sj2
+                WHERE sj2.library_folder_id = sj.library_folder_id
+                  AND sj2.status IN ('completed', 'cancelled', 'failed')
+                  AND (sj2.finished_at > sj.finished_at
+                       OR (sj2.finished_at = sj.finished_at AND sj2.id > sj.id))
+              ) >= ?1
+        )"
+    )
+    .bind(retain_per_folder)
+    .execute(db)
+    .await?;
+    Ok(result.rows_affected())
 }
 
 pub async fn add_seen_paths(db: &Db, job_id: i64, paths: &[String]) -> anyhow::Result<()> {
@@ -413,7 +486,8 @@ pub async fn mark_missing_assets_from_seen(db: &Db, folder_id: i64, job_id: i64)
          WHERE library_folder_id = ?2
            AND absolute_path NOT IN (
              SELECT absolute_path FROM scan_seen_paths WHERE scan_job_id = ?3
-           )"
+           )
+           AND EXISTS (SELECT 1 FROM scan_jobs WHERE id = ?3 AND status = 'running')"
     )
     .bind(&now)
     .bind(folder_id)
@@ -486,80 +560,3 @@ pub async fn mark_thumbnail_failed(db: &Db, asset_id: i64, message: &str) -> any
     Ok(())
 }
 
-pub async fn write_scan_results(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    folder_id: i64,
-    assets: &[(ScannedAsset, Option<String>, Option<i64>, Option<i64>)],
-    existing_paths: &[String],
-) -> anyhow::Result<(usize, usize, u64)> {
-    let mut added = 0usize;
-    let mut updated = 0usize;
-    let now = Utc::now().to_rfc3339();
-
-    for (scanned, thumb_path, width, height) in assets {
-        let is_new: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM assets WHERE absolute_path = ?1")
-            .bind(&scanned.absolute_path)
-            .fetch_one(&mut **tx)
-            .await?;
-
-        sqlx::query(
-            "INSERT INTO assets (
-                library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
-                modified_at, width, height, thumbnail_path, created_at, updated_at
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-            ON CONFLICT(absolute_path) DO UPDATE SET
-                file_name = excluded.file_name,
-                extension = excluded.extension,
-                asset_type = excluded.asset_type,
-                file_size = excluded.file_size,
-                modified_at = excluded.modified_at,
-                width = excluded.width,
-                height = excluded.height,
-                thumbnail_path = excluded.thumbnail_path,
-                is_missing = 0,
-                updated_at = excluded.updated_at"
-        )
-        .bind(folder_id)
-        .bind(&scanned.absolute_path)
-        .bind(&scanned.file_name)
-        .bind(&scanned.extension)
-        .bind(&scanned.asset_type)
-        .bind(scanned.file_size)
-        .bind(&scanned.modified_at)
-        .bind(*width)
-        .bind(*height)
-        .bind(thumb_path.as_deref())
-        .bind(&now)
-        .bind(&now)
-        .execute(&mut **tx)
-        .await?;
-
-        if is_new == 0 {
-            added += 1;
-        } else {
-            updated += 1;
-        }
-    }
-
-    let placeholders: Vec<String> = existing_paths.iter().map(|_| "?".to_string()).collect();
-    let sql = format!(
-        "UPDATE assets SET is_missing = 1, updated_at = ?1 WHERE library_folder_id = ?2 AND absolute_path NOT IN ({})",
-        placeholders.join(",")
-    );
-    let mut query = sqlx::query(&sql)
-        .bind(Utc::now().to_rfc3339())
-        .bind(folder_id);
-    for path in existing_paths {
-        query = query.bind(path);
-    }
-    let missing = query.execute(&mut **tx).await?.rows_affected();
-
-    sqlx::query("UPDATE library_folders SET last_scanned_at = ?1 WHERE id = ?2")
-        .bind(Utc::now().to_rfc3339())
-        .bind(folder_id)
-        .execute(&mut **tx)
-        .await?;
-
-    Ok((added, updated, missing))
-}
