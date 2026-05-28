@@ -100,12 +100,12 @@ Files:
 Files:
 - Modify: src-tauri/src/db.rs
 
-- [ ] Step 1: Add create_scan_job(db, folder_id) returning ScanJob. It inserts status running and started_at now.
-- [ ] Step 2: Add get_scan_job(db, job_id) and latest_scan_job_for_folder(db, folder_id). Both map all ScanJob fields.
-- [ ] Step 3: Add update_scan_job_progress(db, job_id, found, added, updated, unchanged, skipped, current_path).
-- [ ] Step 4: Add finish_scan_job(db, job_id, missing), fail_scan_job(db, job_id, message), and cancel_scan_job(db, job_id). finished_at must be set for completed, failed, and cancelled.
-- [ ] Step 5: Add add_seen_paths(db, job_id, paths). Insert into scan_seen_paths in a transaction, one explicit path per row.
-- [ ] Step 6: Add mark_missing_assets_from_seen(db, folder_id, job_id). Use subquery against scan_seen_paths, not a giant placeholder list.
+- [x] Step 1: Add create_scan_job(db, folder_id) returning ScanJob. It inserts status running and started_at now.
+- [x] Step 2: Add get_scan_job(db, job_id) and latest_scan_job_for_folder(db, folder_id). Both map all ScanJob fields.
+- [x] Step 3: Add update_scan_job_progress(db, job_id, found, added, updated, unchanged, skipped, current_path).
+- [x] Step 4: Add finish_scan_job(db, job_id, missing), fail_scan_job(db, job_id, message), and cancel_scan_job(db, job_id). finished_at must be set for completed, failed, and cancelled.
+- [x] Step 5: Add add_seen_paths(db, job_id, paths). Insert into scan_seen_paths in a transaction, one explicit path per row.
+- [x] Step 6: Add mark_missing_assets_from_seen(db, folder_id, job_id). Use subquery against scan_seen_paths, not a giant placeholder list.
 
     UPDATE assets
     SET is_missing = 1, updated_at = ?1
@@ -114,9 +114,9 @@ Files:
         SELECT absolute_path FROM scan_seen_paths WHERE scan_job_id = ?3
       );
 
-- [ ] Step 7: Add get_scan_settings(db) and save_scan_settings(db, settings).
-- [ ] Step 8: Run: cd I:\GameResManger\src-tauri; cargo check. Expected: backend compiles.
-- [ ] Step 9: Commit: git add src-tauri/src/db.rs; git commit -m "feat: add scan job repository functions".
+- [x] Step 7: Add get_scan_settings(db) and save_scan_settings(db, settings).
+- [x] Step 8: Run: cd I:\GameResManger\src-tauri; cargo check. Expected: backend compiles.
+- [x] Step 9: Commit: git add src-tauri/src/db.rs; git commit -m "feat: add scan job repository functions".
 
 ---
 
