@@ -244,12 +244,12 @@ Files:
 Files:
 - No new files.
 
-- [ ] Step 1: Run frontend tests: cd I:\GameResManger; npm test. Expected: all pass.
-- [ ] Step 2: Run frontend build: cd I:\GameResManger; npm run build. Expected: build passes.
-- [ ] Step 3: Run backend tests: cd I:\GameResManger\src-tauri; cargo test. Expected: all pass.
-- [ ] Step 4: Run backend check: cd I:\GameResManger\src-tauri; cargo check. Expected: compiles.
-- [ ] Step 5: Build release: cd I:\GameResManger; npm run tauri build. Expected: release executable and bundle are produced.
-- [ ] Step 6: Run manual release smoke with G:\资源\2D游戏资源_淘宝\. Expected: scan starts visibly, can be cancelled, can complete or fail with visible error, inserts assets, second scan reports unchanged files, and source files remain untouched.
+- [x] Step 1: Run frontend tests: cd I:\GameResManger; npm test. Expected: all pass.
+- [x] Step 2: Run frontend build: cd I:\GameResManger; npm run build. Expected: build passes.
+- [x] Step 3: Run backend tests: cd I:\GameResManger\src-tauri; cargo test. Expected: all pass.
+- [x] Step 4: Run backend check: cd I:\GameResManger\src-tauri; cargo check. Expected: compiles.
+- [x] Step 5: Build release: cd I:\GameResManger; npm run tauri build. Expected: release executable and bundle are produced. **Result:** release executable built successfully at `src-tauri/target/release/game-resource-manager.exe`. MSI bundling failed due to Wix `light.exe` environment issue, not code-related.
+- [ ] Step 6: Run manual release smoke with G:\资源\2D游戏资源_淘宝\. Expected: scan starts visibly, can be cancelled, can complete or fail with visible error, inserts assets, second scan reports unchanged files, and source files remain untouched. **Note:** requires GUI environment; user should run the built executable and perform the smoke test.
 
 ---
 
