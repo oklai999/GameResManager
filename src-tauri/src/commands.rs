@@ -1,4 +1,5 @@
-use crate::{db, file_actions, indexer, thumbnails, ThumbnailDir};
+use crate::{db, file_actions, indexer, thumbnails, scan_service, ThumbnailDir};
+use crate::scan_service::ScanRuntime;
 use crate::indexer::ScannedAsset;
 use serde::Serialize;
 use sqlx::SqlitePool;
@@ -136,6 +137,63 @@ pub async fn list_asset_tags(
     db: State<'_, SqlitePool>,
 ) -> Result<Vec<(i64, String)>, CommandError> {
     db::list_asset_tags_map(&*db).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn start_scan(
+    db: State<'_, SqlitePool>,
+    thumbnail_dir: State<'_, ThumbnailDir>,
+    runtime: State<'_, ScanRuntime>,
+    folder_id: i64,
+) -> Result<crate::models::ScanJob, CommandError> {
+    let job = db::create_scan_job(&*db, folder_id).await.map_err(CommandError::from)?;
+    let pool = db.inner().clone();
+    let runtime_clone = runtime.inner().clone();
+    let thumb_dir = thumbnail_dir.0.clone();
+    let job_id = job.id;
+
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = scan_service::run_scan_job(pool.clone(), runtime_clone, thumb_dir, folder_id, job_id).await {
+            let _ = db::fail_scan_job(&pool, job_id, &e.to_string()).await;
+        }
+    });
+
+    Ok(job)
+}
+
+#[tauri::command]
+pub async fn cancel_scan(
+    db: State<'_, SqlitePool>,
+    runtime: State<'_, ScanRuntime>,
+    job_id: i64,
+) -> Result<(), CommandError> {
+    runtime.cancel(job_id);
+    db::cancel_scan_job(&*db, job_id).await.map_err(CommandError::from)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn latest_scan_job(
+    db: State<'_, SqlitePool>,
+    folder_id: i64,
+) -> Result<Option<crate::models::ScanJob>, CommandError> {
+    db::latest_scan_job_for_folder(&*db, folder_id).await.map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn get_scan_settings(
+    db: State<'_, SqlitePool>,
+) -> Result<crate::models::ScanSettings, CommandError> {
+    db::get_scan_settings(&*db).await.map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn save_scan_settings(
+    db: State<'_, SqlitePool>,
+    settings: crate::models::ScanSettings,
+) -> Result<(), CommandError> {
+    db::save_scan_settings(&*db, &settings).await.map_err(CommandError::from)?;
+    Ok(())
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

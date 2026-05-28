@@ -46,7 +46,12 @@ pub fn run() {
             commands::reveal_asset_in_folder,
             commands::add_library_folder,
             commands::scan_library_folder,
-            commands::list_asset_tags
+            commands::list_asset_tags,
+            commands::start_scan,
+            commands::cancel_scan,
+            commands::latest_scan_job,
+            commands::get_scan_settings,
+            commands::save_scan_settings
         ])
         .run(tauri::generate_context!())
         .expect("failed to run app");

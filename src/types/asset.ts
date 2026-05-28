@@ -41,3 +41,36 @@ export type ScanResult = {
   skipped: number;
   missing: number;
 };
+
+export type ScanJobStatus = "running" | "completed" | "failed" | "cancelled";
+
+export type ScanJob = {
+  id: number;
+  library_folder_id: number;
+  status: ScanJobStatus;
+  started_at: string;
+  finished_at: string | null;
+  cancelled_at: string | null;
+  found_count: number;
+  added_count: number;
+  updated_count: number;
+  unchanged_count: number;
+  missing_count: number;
+  skipped_count: number;
+  current_path: string | null;
+  error_message: string | null;
+};
+
+export type ScanSettings = {
+  id: number;
+  include_images: boolean;
+  include_audio: boolean;
+  include_video: boolean;
+  include_fonts: boolean;
+  include_models: boolean;
+  include_spine: boolean;
+  include_psd: boolean;
+  generate_psd_thumbnails: boolean;
+  ignored_directory_names: string;
+  updated_at: string;
+};

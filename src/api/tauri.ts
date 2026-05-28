@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Asset, LibraryFolder, ScanResult } from "../types/asset";
+import type { Asset, LibraryFolder, ScanResult, ScanJob, ScanSettings } from "../types/asset";
 
 export async function listAssets(): Promise<Asset[]> {
   return invoke<Asset[]>("list_assets");
@@ -35,4 +35,24 @@ export async function openAssetFile(path: string): Promise<void> {
 
 export async function revealAssetInFolder(path: string): Promise<void> {
   await invoke("reveal_asset_in_folder", { path });
+}
+
+export async function startScan(folderId: number): Promise<ScanJob> {
+  return invoke<ScanJob>("start_scan", { folderId });
+}
+
+export async function cancelScan(jobId: number): Promise<void> {
+  await invoke("cancel_scan", { jobId });
+}
+
+export async function latestScanJob(folderId: number): Promise<ScanJob | null> {
+  return invoke<ScanJob | null>("latest_scan_job", { folderId });
+}
+
+export async function getScanSettings(): Promise<ScanSettings> {
+  return invoke<ScanSettings>("get_scan_settings");
+}
+
+export async function saveScanSettings(settings: ScanSettings): Promise<void> {
+  await invoke("save_scan_settings", { settings });
 }

@@ -160,14 +160,14 @@ Files:
 - Modify: src/types/asset.ts
 - Modify: src/api/tauri.ts
 
-- [ ] Step 1: Add frontend types ScanJobStatus, ScanJob, ScanSettings. Field names must match Rust JSON exactly.
-- [ ] Step 2: Add API wrappers: startScan(folderId), cancelScan(jobId), latestScanJob(folderId), getScanSettings(), saveScanSettings(settings).
-- [ ] Step 3: Add Tauri commands start_scan, cancel_scan, latest_scan_job, get_scan_settings, save_scan_settings.
-- [ ] Step 4: start_scan must create a scan job, spawn run_scan_job, return the job immediately, and fail the job if the spawned task returns an error.
-- [ ] Step 5: cancel_scan must set runtime cancellation and update database status to cancelled.
-- [ ] Step 6: Register new commands in lib.rs generate_handler.
-- [ ] Step 7: Run: cd I:\GameResManger; npm run build; cd src-tauri; cargo check. Expected: frontend and backend compile.
-- [ ] Step 8: Commit: git add src/types/asset.ts src/api/tauri.ts src-tauri/src/commands.rs src-tauri/src/lib.rs; git commit -m "feat: expose scan job commands".
+- [x] Step 1: Add frontend types ScanJobStatus, ScanJob, ScanSettings. Field names must match Rust JSON exactly.
+- [x] Step 2: Add API wrappers: startScan(folderId), cancelScan(jobId), latestScanJob(folderId), getScanSettings(), saveScanSettings(settings).
+- [x] Step 3: Add Tauri commands start_scan, cancel_scan, latest_scan_job, get_scan_settings, save_scan_settings.
+- [x] Step 4: start_scan must create a scan job, spawn run_scan_job, return the job immediately, and fail the job if the spawned task returns an error.
+- [x] Step 5: cancel_scan must set runtime cancellation and update database status to cancelled.
+- [x] Step 6: Register new commands in lib.rs generate_handler.
+- [x] Step 7: Run: cd I:\GameResManger; npm run build; cd src-tauri; cargo check. Expected: frontend and backend compile.
+- [x] Step 8: Commit: git add src/types/asset.ts src/api/tauri.ts src-tauri/src/commands.rs src-tauri/src/lib.rs; git commit -m "feat: expose scan job commands".
 
 ---
 
