@@ -15,6 +15,7 @@ export type Asset = {
   is_missing: boolean;
   created_at: string;
   updated_at: string;
+  tags?: string[];
 };
 
 export type LibraryFolder = {
@@ -31,4 +32,12 @@ export type SearchScope = {
   tag: boolean;
   note: boolean;
   path: boolean;
+};
+
+export type ScanResult = {
+  found: number;
+  added: number;
+  updated: number;
+  skipped: number;
+  missing: number;
 };

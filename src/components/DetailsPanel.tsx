@@ -6,9 +6,10 @@ type Props = {
   onReveal: (asset: Asset) => void;
   onCopyPath: (asset: Asset) => void;
   onApplyTag: (tagName: string, assetIds: number[]) => void;
+  onToggleFavorite: (asset: Asset) => void;
 };
 
-export function DetailsPanel({ selectedAssets, onOpenFile, onReveal, onCopyPath, onApplyTag }: Props) {
+export function DetailsPanel({ selectedAssets, onOpenFile, onReveal, onCopyPath, onApplyTag, onToggleFavorite }: Props) {
   if (selectedAssets.length === 0) {
     return <aside className="details-panel muted">选择资源查看详情</aside>;
   }
@@ -30,9 +31,16 @@ export function DetailsPanel({ selectedAssets, onOpenFile, onReveal, onCopyPath,
       <div className="detail-row">类型：{asset.asset_type}</div>
       <div className="detail-row">大小：{asset.file_size} bytes</div>
       <div className="detail-row path">{asset.absolute_path}</div>
+      {asset.tags && asset.tags.length > 0 && (
+        <div className="detail-row">标签：{asset.tags.join(", ")}</div>
+      )}
+      <button onClick={() => onToggleFavorite(asset)}>
+        {asset.is_favorite ? "取消收藏" : "收藏"}
+      </button>
       <button onClick={() => onOpenFile(asset)}>打开文件</button>
       <button onClick={() => onReveal(asset)}>打开所在目录</button>
       <button onClick={() => onCopyPath(asset)}>复制路径</button>
+      <button onClick={() => onApplyTag("待整理", [asset.id])}>添加标签：待整理</button>
     </aside>
   );
 }

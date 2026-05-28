@@ -33,6 +33,7 @@ describe("DetailsPanel", () => {
         onReveal={vi.fn()}
         onCopyPath={vi.fn()}
         onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
       />
     );
 

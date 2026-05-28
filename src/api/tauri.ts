@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Asset, LibraryFolder } from "../types/asset";
+import type { Asset, LibraryFolder, ScanResult } from "../types/asset";
 
 export async function listAssets(): Promise<Asset[]> {
   return invoke<Asset[]>("list_assets");
@@ -7,6 +7,18 @@ export async function listAssets(): Promise<Asset[]> {
 
 export async function listLibraryFolders(): Promise<LibraryFolder[]> {
   return invoke<LibraryFolder[]>("list_library_folders");
+}
+
+export async function addLibraryFolder(name: string, path: string): Promise<LibraryFolder> {
+  return invoke<LibraryFolder>("add_library_folder", { name, path });
+}
+
+export async function scanLibraryFolder(folderId: number): Promise<ScanResult> {
+  return invoke<ScanResult>("scan_library_folder", { folderId });
+}
+
+export async function listAssetTags(): Promise<[number, string][]> {
+  return invoke<[number, string][]>("list_asset_tags");
 }
 
 export async function setAssetFavorite(assetId: number, isFavorite: boolean): Promise<void> {

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, SqlitePool};
 use std::path::Path;
 
 pub type Db = SqlitePool;
@@ -9,10 +9,13 @@ pub async fn connect(database_path: &Path) -> anyhow::Result<Db> {
         std::fs::create_dir_all(parent).context("failed to create database directory")?;
     }
 
-    let url = format!("sqlite://{}", database_path.display());
+    let options = SqliteConnectOptions::new()
+        .filename(database_path)
+        .create_if_missing(true)
+        .foreign_keys(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(&url)
+        .connect_with(options)
         .await
         .context("failed to connect sqlite database")?;
 
@@ -198,4 +201,134 @@ pub async fn apply_tag_to_assets(db: &Db, tag_name: &str, asset_ids: &[i64]) -> 
             .await?;
     }
     Ok(())
+}
+
+pub async fn get_folder_by_id(db: &Db, id: i64) -> anyhow::Result<Option<LibraryFolder>> {
+    let row = sqlx::query_as::<_, (i64, String, String, String, Option<String>, i64)>(
+        "SELECT id, name, path, created_at, last_scanned_at, is_enabled FROM library_folders WHERE id = ?1"
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row.map(|row| LibraryFolder {
+        id: row.0,
+        name: row.1,
+        path: row.2,
+        created_at: row.3,
+        last_scanned_at: row.4,
+        is_enabled: row.5 == 1,
+    }))
+}
+
+pub async fn update_folder_last_scanned(db: &Db, id: i64) -> anyhow::Result<()> {
+    sqlx::query("UPDATE library_folders SET last_scanned_at = ?1 WHERE id = ?2")
+        .bind(Utc::now().to_rfc3339())
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub async fn mark_missing_assets(db: &Db, folder_id: i64, existing_paths: &[String]) -> anyhow::Result<u64> {
+    let placeholders: Vec<String> = existing_paths.iter().map(|_| "?".to_string()).collect();
+    let sql = format!(
+        "UPDATE assets SET is_missing = 1, updated_at = ?1 WHERE library_folder_id = ?2 AND absolute_path NOT IN ({})",
+        placeholders.join(",")
+    );
+    let mut query = sqlx::query(&sql)
+        .bind(Utc::now().to_rfc3339())
+        .bind(folder_id);
+    for path in existing_paths {
+        query = query.bind(path);
+    }
+    let result = query.execute(db).await?;
+    Ok(result.rows_affected())
+}
+
+pub async fn list_asset_tags_map(db: &Db) -> anyhow::Result<Vec<(i64, String)>> {
+    let rows = sqlx::query_as::<_, (i64, String)>(
+        "SELECT a.asset_id, t.name FROM asset_tags a JOIN tags t ON a.tag_id = t.id"
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn write_scan_results(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    folder_id: i64,
+    assets: &[(ScannedAsset, Option<String>, Option<i64>, Option<i64>)],
+    existing_paths: &[String],
+) -> anyhow::Result<(usize, usize, u64)> {
+    let mut added = 0usize;
+    let mut updated = 0usize;
+    let now = Utc::now().to_rfc3339();
+
+    for (scanned, thumb_path, width, height) in assets {
+        let is_new: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM assets WHERE absolute_path = ?1")
+            .bind(&scanned.absolute_path)
+            .fetch_one(&mut **tx)
+            .await?;
+
+        sqlx::query(
+            "INSERT INTO assets (
+                library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
+                modified_at, width, height, thumbnail_path, created_at, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ON CONFLICT(absolute_path) DO UPDATE SET
+                file_name = excluded.file_name,
+                extension = excluded.extension,
+                asset_type = excluded.asset_type,
+                file_size = excluded.file_size,
+                modified_at = excluded.modified_at,
+                width = excluded.width,
+                height = excluded.height,
+                thumbnail_path = excluded.thumbnail_path,
+                is_missing = 0,
+                updated_at = excluded.updated_at"
+        )
+        .bind(folder_id)
+        .bind(&scanned.absolute_path)
+        .bind(&scanned.file_name)
+        .bind(&scanned.extension)
+        .bind(&scanned.asset_type)
+        .bind(scanned.file_size)
+        .bind(&scanned.modified_at)
+        .bind(*width)
+        .bind(*height)
+        .bind(thumb_path.as_deref())
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut **tx)
+        .await?;
+
+        if is_new == 0 {
+            added += 1;
+        } else {
+            updated += 1;
+        }
+    }
+
+    let placeholders: Vec<String> = existing_paths.iter().map(|_| "?".to_string()).collect();
+    let sql = format!(
+        "UPDATE assets SET is_missing = 1, updated_at = ?1 WHERE library_folder_id = ?2 AND absolute_path NOT IN ({})",
+        placeholders.join(",")
+    );
+    let mut query = sqlx::query(&sql)
+        .bind(Utc::now().to_rfc3339())
+        .bind(folder_id);
+    for path in existing_paths {
+        query = query.bind(path);
+    }
+    let missing = query.execute(&mut **tx).await?.rows_affected();
+
+    sqlx::query("UPDATE library_folders SET last_scanned_at = ?1 WHERE id = ?2")
+        .bind(Utc::now().to_rfc3339())
+        .bind(folder_id)
+        .execute(&mut **tx)
+        .await?;
+
+    Ok((added, updated, missing))
 }

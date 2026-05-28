@@ -23,13 +23,20 @@ const asset: Asset = {
   updated_at: "2026-05-27T00:00:00Z",
 };
 
-describe("AssetGrid", () => {
-  it("calls selection change when an asset is clicked", async () => {
-    const onSelectionChange = vi.fn();
-    render(<AssetGrid assets={[asset]} selectedIds={[]} onSelectionChange={onSelectionChange} onToggleFavorite={vi.fn()} />);
+describe("AssetGrid favorite", () => {
+  it("calls onToggleFavorite when favorite button is clicked", async () => {
+    const onToggleFavorite = vi.fn();
+    render(
+      <AssetGrid
+        assets={[asset]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={onToggleFavorite}
+      />
+    );
 
-    await userEvent.click(screen.getByTitle("C:/assets/icon.png"));
+    await userEvent.click(screen.getByTitle("收藏"));
 
-    expect(onSelectionChange).toHaveBeenCalledWith([1]);
+    expect(onToggleFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
   });
 });

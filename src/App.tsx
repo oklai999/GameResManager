@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { applyTagToAssets, listAssets, listLibraryFolders, openAssetFile, revealAssetInFolder } from "./api/tauri";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  addLibraryFolder,
+  applyTagToAssets,
+  listAssets,
+  listAssetTags,
+  listLibraryFolders,
+  openAssetFile,
+  revealAssetInFolder,
+  scanLibraryFolder,
+  setAssetFavorite,
+} from "./api/tauri";
 import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { LibrarySidebar } from "./components/LibrarySidebar";
 import { SearchToolbar } from "./components/SearchToolbar";
-import type { Asset, LibraryFolder, SearchScope } from "./types/asset";
+import type { Asset, LibraryFolder, ScanResult, SearchScope } from "./types/asset";
 
 export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -13,11 +23,37 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>({ fileName: true, tag: true, note: true, path: false });
+  const [error, setError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [assetList, folderList, tagList] = await Promise.all([
+        listAssets(),
+        listLibraryFolders(),
+        listAssetTags(),
+      ]);
+      const tagMap = new Map<number, string[]>();
+      for (const [assetId, tagName] of tagList) {
+        const arr = tagMap.get(assetId) ?? [];
+        arr.push(tagName);
+        tagMap.set(assetId, arr);
+      }
+      const assetsWithTags = assetList.map((a) => ({
+        ...a,
+        tags: tagMap.get(a.id) ?? [],
+      }));
+      setAssets(assetsWithTags);
+      setFolders(folderList);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
 
   useEffect(() => {
-    listAssets().then(setAssets).catch(console.error);
-    listLibraryFolders().then(setFolders).catch(console.error);
-  }, []);
+    loadData();
+  }, [loadData]);
 
   const filteredAssets = useMemo(() => {
     return assets.filter((asset) => {
@@ -30,6 +66,7 @@ export default function App() {
         scope.fileName ? asset.file_name : "",
         scope.note ? asset.note : "",
         scope.path ? asset.absolute_path : "",
+        scope.tag ? (asset.tags ?? []).join(" ") : "",
       ];
       return haystacks.some((value) => value.toLowerCase().includes(normalizedQuery));
     });
@@ -37,19 +74,84 @@ export default function App() {
 
   const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
 
+  const handleAddFolder = useCallback(async (name: string, path: string) => {
+    if (!name.trim() || !path.trim()) {
+      setError("名称和路径不能为空");
+      return;
+    }
+    try {
+      await addLibraryFolder(name, path);
+      await loadData();
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [loadData]);
+
+  const handleScanFolder = useCallback(async (folderId: number) => {
+    try {
+      const result = await scanLibraryFolder(folderId);
+      setScanResult(result);
+      await loadData();
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [loadData]);
+
+  const handleToggleFavorite = useCallback(async (asset: Asset) => {
+    try {
+      await setAssetFavorite(asset.id, !asset.is_favorite);
+      setAssets((prev) =>
+        prev.map((a) => (a.id === asset.id ? { ...a, is_favorite: !a.is_favorite } : a))
+      );
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
+  const handleApplyTag = useCallback(async (tagName: string, assetIds: number[]) => {
+    try {
+      await applyTagToAssets(tagName, assetIds);
+      await loadData();
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [loadData]);
+
   return (
     <main className="app-shell">
-      <LibrarySidebar folders={folders} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+      <LibrarySidebar
+        folders={folders}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+        onAddFolder={handleAddFolder}
+        onScanFolder={handleScanFolder}
+        error={error}
+      />
       <section className="workspace">
         <SearchToolbar query={query} scope={scope} onQueryChange={setQuery} onScopeChange={setScope} />
-        <AssetGrid assets={filteredAssets} selectedIds={selectedIds} onSelectionChange={setSelectedIds} />
+        {scanResult && (
+          <div className="scan-result">
+            扫描完成：发现 {scanResult.found}，新增 {scanResult.added}，更新 {scanResult.updated}，跳过 {scanResult.skipped}，缺失 {scanResult.missing}
+          </div>
+        )}
+        <AssetGrid
+          assets={filteredAssets}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onToggleFavorite={handleToggleFavorite}
+        />
       </section>
       <DetailsPanel
         selectedAssets={selectedAssets}
         onOpenFile={(asset) => openAssetFile(asset.absolute_path)}
         onReveal={(asset) => revealAssetInFolder(asset.absolute_path)}
         onCopyPath={(asset) => navigator.clipboard.writeText(asset.absolute_path)}
-        onApplyTag={(tagName, assetIds) => applyTagToAssets(tagName, assetIds)}
+        onApplyTag={handleApplyTag}
+        onToggleFavorite={handleToggleFavorite}
       />
     </main>
   );

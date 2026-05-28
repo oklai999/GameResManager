@@ -12,12 +12,20 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "游戏资源管理器",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
         "minHeight": 720
       }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico"
     ]
   }
 }
