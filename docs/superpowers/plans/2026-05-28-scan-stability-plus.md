@@ -141,14 +141,14 @@ Files:
 - Create: src-tauri/src/scan_service.rs
 - Modify: src-tauri/src/lib.rs
 
-- [ ] Step 1: Create ScanRuntime with Arc<Mutex<HashSet<i64>>> and methods cancel(job_id), is_cancelled(job_id), clear(job_id).
-- [ ] Step 2: Add ScanCounters with found, added, updated, unchanged, skipped.
-- [ ] Step 3: Add constant SCAN_BATCH_SIZE = 500.
-- [ ] Step 4: Implement persist_batch(db_pool, folder_id, job_id, batch, counters). It adds seen paths, checks existing asset by absolute_path, increments unchanged when file_size and modified_at match, and upserts changed assets.
-- [ ] Step 5: Implement run_scan_job(db_pool, runtime, thumbnail_dir, folder_id, job_id). It loads folder and settings, scans with settings, writes every 500 assets, updates progress, checks cancellation between assets, marks missing through scan_seen_paths, finishes job, and records failure through fail_scan_job in the caller.
-- [ ] Step 6: Register module in lib.rs: mod scan_service; and app.manage(scan_service::ScanRuntime::default()) inside setup.
-- [ ] Step 7: Run: cd I:\GameResManger\src-tauri; cargo check. Expected: backend compiles.
-- [ ] Step 8: Commit: git add src-tauri/src/scan_service.rs src-tauri/src/lib.rs; git commit -m "feat: add cancellable batch scan service".
+- [x] Step 1: Create ScanRuntime with Arc<Mutex<HashSet<i64>>> and methods cancel(job_id), is_cancelled(job_id), clear(job_id).
+- [x] Step 2: Add ScanCounters with found, added, updated, unchanged, skipped.
+- [x] Step 3: Add constant SCAN_BATCH_SIZE = 500.
+- [x] Step 4: Implement persist_batch(db_pool, folder_id, job_id, batch, counters). It adds seen paths, checks existing asset by absolute_path, increments unchanged when file_size and modified_at match, and upserts changed assets.
+- [x] Step 5: Implement run_scan_job(db_pool, runtime, thumbnail_dir, folder_id, job_id). It loads folder and settings, scans with settings, writes every 500 assets, updates progress, checks cancellation between assets, marks missing through scan_seen_paths, finishes job, and records failure through fail_scan_job in the caller.
+- [x] Step 6: Register module in lib.rs: mod scan_service; and app.manage(scan_service::ScanRuntime::default()) inside setup.
+- [x] Step 7: Run: cd I:\GameResManger\src-tauri; cargo check. Expected: backend compiles.
+- [x] Step 8: Commit: git add src-tauri/src/scan_service.rs src-tauri/src/lib.rs; git commit -m "feat: add cancellable batch scan service".
 
 ---
 

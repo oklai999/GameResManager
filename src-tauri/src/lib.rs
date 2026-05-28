@@ -3,6 +3,7 @@ mod db;
 mod file_actions;
 mod indexer;
 mod models;
+mod scan_service;
 mod tags;
 mod thumbnails;
 
@@ -33,6 +34,7 @@ pub fn run() {
                 eprintln!("Failed to create thumbnail directory: {}", e);
             }
             app.manage(ThumbnailDir(thumbnail_dir));
+            app.manage(scan_service::ScanRuntime::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
