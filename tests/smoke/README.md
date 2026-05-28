@@ -30,3 +30,21 @@ Create a local folder outside the repository with:
 ## Safety
 
 The app must not delete, move, rename, or modify fixture files during this smoke test.
+
+---
+
+## Large Folder Release Scan
+
+Use `G:\资源\2D游戏资源_淘宝\` or equivalent large local folder (about 62,000+ supported files).
+
+- [ ] Add folder.
+- [ ] Click Scan.
+- [ ] Confirm Cancel button appears within one second.
+- [ ] Confirm `scan_jobs` table has a `running` row.
+- [ ] Confirm asset count in grid increases during scan (not stuck at 0).
+- [ ] Click Cancel and confirm scan stops and job status becomes `cancelled`.
+- [ ] Confirm already-inserted assets remain visible after cancellation.
+- [ ] Run second scan on same folder and confirm `unchanged_count` is reported.
+- [ ] Confirm ignored directories (`node_modules`, `.git`, `.godot`, `target`, `dist`, `build`, `.codex_spreadsheet_tinyswords`) are skipped.
+- [ ] Confirm PSD files are indexed but do not generate thumbnails by default.
+- [ ] Confirm source asset files are untouched (no delete, move, rename, or modification).

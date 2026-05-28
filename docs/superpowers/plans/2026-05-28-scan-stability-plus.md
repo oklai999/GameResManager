@@ -234,8 +234,8 @@ Files:
 Files:
 - Modify: tests/smoke/README.md
 
-- [ ] Step 1: Append Large Folder Release Scan checklist. Include add folder, click scan, confirm Cancel appears within one second, scan_jobs running row, asset count increases, cancel works, second scan shows unchanged_count, ignored dirs are skipped, PSD thumbnails are off by default, and source files are untouched.
-- [ ] Step 2: Commit: git add tests/smoke/README.md; git commit -m "docs: add large scan smoke checklist".
+- [x] Step 1: Append Large Folder Release Scan checklist. Include add folder, click scan, confirm Cancel appears within one second, scan_jobs running row, asset count increases, cancel works, second scan shows unchanged_count, ignored dirs are skipped, PSD thumbnails are off by default, and source files are untouched.
+- [x] Step 2: Commit: git add tests/smoke/README.md; git commit -m "docs: add large scan smoke checklist".
 
 ---
 
