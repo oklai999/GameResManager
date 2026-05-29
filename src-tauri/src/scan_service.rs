@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use chrono::Utc;
 use walkdir::WalkDir;
 use crate::db;
-use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, asset_type_allowed, should_generate_thumbnail, ScannedAsset};
+use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, asset_type_allowed, should_generate_thumbnail, ScannedAsset, THUMBNAIL_STATUS_NONE};
 use crate::models::AssetType;
 use crate::thumbnails;
 
@@ -323,6 +323,11 @@ pub async fn run_scan_job(
                 asset_type: asset_type.as_str().to_string(),
                 file_size: metadata.len() as i64,
                 modified_at: modified_at.to_rfc3339(),
+                thumbnail_path: None,
+                width: None,
+                height: None,
+                thumbnail_status: THUMBNAIL_STATUS_NONE.to_string(),
+                thumbnail_error: None,
             });
 
             if batch.len() >= SCAN_BATCH_SIZE {

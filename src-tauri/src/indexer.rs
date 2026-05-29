@@ -33,7 +33,9 @@ use chrono::{DateTime, Utc};
 use std::fs;
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone)]
+pub const THUMBNAIL_STATUS_NONE: &str = "none";
+
+#[derive(Debug, Clone, Default)]
 pub struct ScannedAsset {
     pub absolute_path: String,
     pub file_name: String,
@@ -41,6 +43,11 @@ pub struct ScannedAsset {
     pub asset_type: String,
     pub file_size: i64,
     pub modified_at: String,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub thumbnail_path: Option<String>,
+    pub thumbnail_status: String,
+    pub thumbnail_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -101,6 +108,7 @@ pub fn scan_folder(path: &Path) -> anyhow::Result<ScanOutput> {
             asset_type: asset_type.as_str().to_string(),
             file_size: metadata.len() as i64,
             modified_at: modified_at.to_rfc3339(),
+            ..Default::default()
         });
     }
 
@@ -199,6 +207,7 @@ pub fn scan_folder_with_settings(path: &Path, settings: &ScanSettings) -> anyhow
             asset_type: asset_type.as_str().to_string(),
             file_size: metadata.len() as i64,
             modified_at: modified_at.to_rfc3339(),
+            ..Default::default()
         });
     }
 
