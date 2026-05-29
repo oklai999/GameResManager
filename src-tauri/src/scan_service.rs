@@ -6,7 +6,6 @@ use walkdir::WalkDir;
 use crate::db;
 use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, asset_type_allowed, should_generate_thumbnail, ScannedAsset};
 use crate::models::AssetType;
-use crate::thumbnails;
 
 #[derive(Clone)]
 pub struct ScanRuntime {
@@ -100,8 +99,6 @@ async fn persist_batch(
     job_id: i64,
     batch: &[ScannedAsset],
     counters: &mut ScanCounters,
-    thumbnail_dir: &std::path::Path,
-    settings: &crate::models::ScanSettings,
 ) -> anyhow::Result<()> {
     let mut tx = db_pool.begin().await?;
 
@@ -152,21 +149,6 @@ async fn persist_batch(
 
             let was_existing = existing.contains_key(&asset.absolute_path);
 
-            let (thumb_width, thumb_height, thumb_path): (Option<i64>, Option<i64>, Option<String>) =
-                if should_generate_thumbnail(&asset.extension, settings) {
-                    match thumbnails::generate_image_thumbnail(
-                        std::path::Path::new(&asset.absolute_path),
-                        &asset.absolute_path,
-                        &asset.modified_at,
-                        thumbnail_dir,
-                    ) {
-                        Ok(result) => (Some(result.width), Some(result.height), Some(result.thumbnail_path)),
-                        Err(_) => (None, None, None),
-                    }
-                } else {
-                    (None, None, None)
-                };
-
             sqlx::query(
                 "INSERT INTO assets (
                     library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
@@ -192,9 +174,9 @@ async fn persist_batch(
             .bind(&asset.asset_type)
             .bind(asset.file_size)
             .bind(&asset.modified_at)
-            .bind(thumb_width)
-            .bind(thumb_height)
-            .bind(thumb_path.as_deref())
+            .bind(asset.width)
+            .bind(asset.height)
+            .bind(asset.thumbnail_path.as_deref())
             .bind(&now)
             .bind(&now)
             .execute(&mut *tx)
@@ -225,7 +207,43 @@ async fn flush_batch(
     if batch.is_empty() {
         return Ok(());
     }
-    persist_batch(db_pool, folder_id, job_id, batch, counters, thumbnail_dir, settings).await?;
+
+    let mut handles = Vec::new();
+    for (idx, asset) in batch.iter().enumerate() {
+        if should_generate_thumbnail(&asset.extension, settings) {
+            let abs_path = asset.absolute_path.clone();
+            let modified = asset.modified_at.clone();
+            let thumb_dir = thumbnail_dir.to_path_buf();
+            let handle = tokio::spawn(async move {
+                let result = crate::thumbnails::generate_image_thumbnail_async(
+                    std::path::Path::new(&abs_path),
+                    &abs_path,
+                    &modified,
+                    &thumb_dir,
+                ).await;
+                (idx, result)
+            });
+            handles.push(handle);
+        }
+    }
+
+    for handle in handles {
+        let (idx, result) = handle.await.map_err(|e| anyhow::anyhow!("thumbnail task failed: {}", e))?;
+        match result {
+            Ok(r) => {
+                batch[idx].thumbnail_path = Some(r.thumbnail_path);
+                batch[idx].width = Some(r.width);
+                batch[idx].height = Some(r.height);
+                batch[idx].thumbnail_status = "ready".to_string();
+            }
+            Err(e) => {
+                batch[idx].thumbnail_status = "failed".to_string();
+                batch[idx].thumbnail_error = Some(e.to_string());
+            }
+        }
+    }
+
+    persist_batch(db_pool, folder_id, job_id, batch, counters).await?;
     db::update_scan_job_progress(
         db_pool,
         job_id,
@@ -316,7 +334,7 @@ pub async fn run_scan_job(
                 .unwrap_or_default()
                 .to_string();
 
-            let mut scanned = ScannedAsset {
+            let scanned = ScannedAsset {
                 absolute_path,
                 file_name,
                 extension: extension.clone(),
@@ -325,26 +343,6 @@ pub async fn run_scan_job(
                 modified_at: modified_at.to_rfc3339(),
                 ..Default::default()
             };
-
-            if should_generate_thumbnail(&extension, &settings) {
-                match crate::thumbnails::generate_image_thumbnail_async(
-                    std::path::Path::new(&scanned.absolute_path),
-                    &scanned.absolute_path,
-                    &scanned.modified_at,
-                    &thumbnail_dir,
-                ).await {
-                    Ok(result) => {
-                        scanned.thumbnail_path = Some(result.thumbnail_path);
-                        scanned.width = Some(result.width);
-                        scanned.height = Some(result.height);
-                        scanned.thumbnail_status = "ready".to_string();
-                    }
-                    Err(e) => {
-                        scanned.thumbnail_status = "failed".to_string();
-                        scanned.thumbnail_error = Some(e.to_string());
-                    }
-                }
-            }
 
             batch.push(scanned);
 
