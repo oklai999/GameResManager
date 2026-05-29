@@ -152,9 +152,10 @@ async fn persist_batch(
             sqlx::query(
                 "INSERT INTO assets (
                     library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
-                    modified_at, width, height, thumbnail_path, created_at, updated_at
+                    modified_at, width, height, thumbnail_path, thumbnail_status, thumbnail_error,
+                    created_at, updated_at
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                 ON CONFLICT(absolute_path) DO UPDATE SET
                     file_name = excluded.file_name,
                     extension = excluded.extension,
@@ -164,6 +165,8 @@ async fn persist_batch(
                     width = COALESCE(excluded.width, assets.width),
                     height = COALESCE(excluded.height, assets.height),
                     thumbnail_path = COALESCE(excluded.thumbnail_path, assets.thumbnail_path),
+                    thumbnail_status = excluded.thumbnail_status,
+                    thumbnail_error = excluded.thumbnail_error,
                     is_missing = 0,
                     updated_at = excluded.updated_at"
             )
@@ -177,6 +180,8 @@ async fn persist_batch(
             .bind(asset.width)
             .bind(asset.height)
             .bind(asset.thumbnail_path.as_deref())
+            .bind(&asset.thumbnail_status)
+            .bind(&asset.thumbnail_error)
             .bind(&now)
             .bind(&now)
             .execute(&mut *tx)
