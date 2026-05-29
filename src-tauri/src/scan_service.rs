@@ -898,4 +898,70 @@ mod tests {
         assert_ne!(new_job.id, stale_job.id);
         assert_eq!(new_job.status, crate::models::ScanJobStatus::Running);
     }
+
+    #[tokio::test]
+    async fn scan_creates_thumbnail_for_image() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+
+        // Create a real 10x10 PNG using the image crate
+        let img = image::RgbImage::new(10, 10);
+        let png_path = asset_dir.join("icon.png");
+        img.save(&png_path).unwrap();
+
+        let job = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job.id).await.unwrap();
+
+        let assets = crate::db::list_assets(&db, 1000, 0).await.unwrap();
+        assert_eq!(assets.len(), 1);
+        let asset = &assets[0];
+        assert!(asset.thumbnail_path.is_some(), "thumbnail_path should be set for image");
+        assert_eq!(asset.thumbnail_status, "ready");
+        assert!(std::path::Path::new(asset.thumbnail_path.as_ref().unwrap()).exists(), "thumbnail file should exist");
+        assert_eq!(asset.width, Some(10));
+        assert_eq!(asset.height, Some(10));
+    }
+
+    #[tokio::test]
+    async fn scan_skips_thumbnail_for_audio() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+        write_file(asset_dir, "sound.wav", b"RIFF");
+
+        let job = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job.id).await.unwrap();
+
+        let assets = crate::db::list_assets(&db, 1000, 0).await.unwrap();
+        assert_eq!(assets.len(), 1);
+        let asset = &assets[0];
+        assert!(asset.thumbnail_path.is_none(), "audio should not have thumbnail");
+        assert_eq!(asset.thumbnail_status, "none");
+    }
+
+    #[tokio::test]
+    async fn rescan_unchanged_preserves_thumbnail() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+
+        let img = image::RgbImage::new(10, 10);
+        let png_path = asset_dir.join("icon.png");
+        img.save(&png_path).unwrap();
+
+        let job1 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job1.id).await.unwrap();
+
+        let assets = crate::db::list_assets(&db, 1000, 0).await.unwrap();
+        let first_thumb = assets[0].thumbnail_path.clone();
+        let first_status = assets[0].thumbnail_status.clone();
+
+        let job2 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job2.id).await.unwrap();
+
+        let assets = crate::db::list_assets(&db, 1000, 0).await.unwrap();
+        assert_eq!(assets[0].thumbnail_path, first_thumb, "thumbnail_path should be preserved");
+        assert_eq!(assets[0].thumbnail_status, first_status, "thumbnail_status should be preserved");
+    }
 }

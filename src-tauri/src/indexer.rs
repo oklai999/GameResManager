@@ -35,7 +35,7 @@ use walkdir::WalkDir;
 
 pub const THUMBNAIL_STATUS_NONE: &str = "none";
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ScannedAsset {
     pub absolute_path: String,
     pub file_name: String,
@@ -48,6 +48,24 @@ pub struct ScannedAsset {
     pub thumbnail_path: Option<String>,
     pub thumbnail_status: String,
     pub thumbnail_error: Option<String>,
+}
+
+impl Default for ScannedAsset {
+    fn default() -> Self {
+        Self {
+            absolute_path: String::new(),
+            file_name: String::new(),
+            extension: String::new(),
+            asset_type: String::new(),
+            file_size: 0,
+            modified_at: String::new(),
+            width: None,
+            height: None,
+            thumbnail_path: None,
+            thumbnail_status: THUMBNAIL_STATUS_NONE.to_string(),
+            thumbnail_error: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
