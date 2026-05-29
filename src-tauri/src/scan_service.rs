@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use chrono::Utc;
 use walkdir::WalkDir;
 use crate::db;
-use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, asset_type_allowed, should_generate_thumbnail, ScannedAsset, THUMBNAIL_STATUS_NONE};
+use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, asset_type_allowed, should_generate_thumbnail, ScannedAsset};
 use crate::models::AssetType;
 use crate::thumbnails;
 
@@ -316,19 +316,37 @@ pub async fn run_scan_job(
                 .unwrap_or_default()
                 .to_string();
 
-            batch.push(ScannedAsset {
+            let mut scanned = ScannedAsset {
                 absolute_path,
                 file_name,
-                extension,
+                extension: extension.clone(),
                 asset_type: asset_type.as_str().to_string(),
                 file_size: metadata.len() as i64,
                 modified_at: modified_at.to_rfc3339(),
-                thumbnail_path: None,
-                width: None,
-                height: None,
-                thumbnail_status: THUMBNAIL_STATUS_NONE.to_string(),
-                thumbnail_error: None,
-            });
+                ..Default::default()
+            };
+
+            if should_generate_thumbnail(&extension, &settings) {
+                match crate::thumbnails::generate_image_thumbnail_async(
+                    std::path::Path::new(&scanned.absolute_path),
+                    &scanned.absolute_path,
+                    &scanned.modified_at,
+                    &thumbnail_dir,
+                ).await {
+                    Ok(result) => {
+                        scanned.thumbnail_path = Some(result.thumbnail_path);
+                        scanned.width = Some(result.width);
+                        scanned.height = Some(result.height);
+                        scanned.thumbnail_status = "ready".to_string();
+                    }
+                    Err(e) => {
+                        scanned.thumbnail_status = "failed".to_string();
+                        scanned.thumbnail_error = Some(e.to_string());
+                    }
+                }
+            }
+
+            batch.push(scanned);
 
             if batch.len() >= SCAN_BATCH_SIZE {
                 flush_batch(&db_pool, folder_id, job_id, &mut batch, &mut counters, &thumbnail_dir, &settings).await?;
