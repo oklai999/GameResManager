@@ -40,6 +40,24 @@ pub fn generate_image_thumbnail(
     })
 }
 
+pub async fn generate_image_thumbnail_async(
+    source_path: &std::path::Path,
+    source_key: &str,
+    modified_at: &str,
+    cache_dir: &std::path::Path,
+) -> anyhow::Result<ThumbnailResult> {
+    let source_path = source_path.to_path_buf();
+    let source_key = source_key.to_string();
+    let modified_at = modified_at.to_string();
+    let cache_dir = cache_dir.to_path_buf();
+
+    tokio::task::spawn_blocking(move || {
+        generate_image_thumbnail(&source_path, &source_key, &modified_at, &cache_dir)
+    })
+    .await
+    .context("thumbnail generation task failed")?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
