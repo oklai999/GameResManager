@@ -68,10 +68,21 @@ pub fn should_ignore_dir(path: &Path, settings: &ScanSettings) -> bool {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return false;
     };
+    if name.eq_ignore_ascii_case("__MACOSX") {
+        return true;
+    }
     let name_lower = name.to_ascii_lowercase();
     settings.ignored_directory_names.split(',').any(|ignored| {
         ignored.trim().eq_ignore_ascii_case(&name_lower)
     })
+}
+
+pub fn should_ignore_file(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+
+    name == ".DS_Store" || name.starts_with("._")
 }
 
 pub fn should_ignore_extension(ext: &str, settings: &ScanSettings) -> bool {
@@ -245,5 +256,34 @@ updated_at: "2026-05-28T00:00:00Z".to_string(),
         assert!(should_ignore_extension("tmp", &settings));
         assert!(should_ignore_extension("old", &settings));
         assert!(!should_ignore_extension("png", &settings));
+    }
+
+    #[test]
+    fn ignores_macos_metadata_directory() {
+        let settings = ScanSettings {
+            id: 1,
+            include_images: true,
+            include_audio: true,
+            include_video: true,
+            include_fonts: true,
+            include_models: true,
+            include_spine: true,
+            include_psd: true,
+            generate_psd_thumbnails: false,
+            ignored_directory_names: "".to_string(),
+            thumbnail_cache_dir: None,
+            database_path: None,
+            ignored_extensions: "".to_string(),
+            updated_at: "2026-05-28T00:00:00Z".to_string(),
+        };
+
+        assert!(should_ignore_dir(Path::new("G:/assets/__MACOSX"), &settings));
+    }
+
+    #[test]
+    fn ignores_appledouble_and_ds_store_files() {
+        assert!(should_ignore_file(Path::new("._Archery.png")));
+        assert!(should_ignore_file(Path::new(".DS_Store")));
+        assert!(!should_ignore_file(Path::new("Archery.png")));
     }
 }

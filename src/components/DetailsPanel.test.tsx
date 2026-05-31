@@ -73,6 +73,48 @@ describe("DetailsPanel", () => {
     expect(await screen.findByText("1.png")).toBeInTheDocument();
   });
 
+  it("shows thumbnail error for failed thumbnails", async () => {
+    const asset = makeAsset(1);
+    asset.thumbnail_status = "failed";
+    asset.thumbnail_error = "Invalid PNG signature";
+
+    render(
+      <DetailsPanel
+        selectedAssets={[asset]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("缩略图错误：Invalid PNG signature")).toBeInTheDocument();
+  });
+
+  it("shows thumbnail cache path for ready thumbnails", async () => {
+    const asset = makeAsset(1);
+    asset.thumbnail_status = "ready";
+    asset.thumbnail_path = "C:/cache/icon.webp";
+
+    render(
+      <DetailsPanel
+        selectedAssets={[asset]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("缩略图缓存：C:/cache/icon.webp")).toBeInTheDocument();
+  });
+
   it("calls onApplyTag when tag is submitted in single mode", async () => {
     const onApplyTag = vi.fn();
     render(

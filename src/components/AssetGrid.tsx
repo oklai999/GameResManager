@@ -9,8 +9,9 @@ type Props = {
   onToggleFavorite: (asset: Asset) => void;
 };
 
-function placeholderText(asset: Asset): string {
+function placeholderText(asset: Asset, imageLoadFailed: boolean): string {
   if (asset.is_missing) return "缺失";
+  if (imageLoadFailed) return "预览加载失败";
   if (asset.thumbnail_status === "failed") return "缩略图失败";
   if (asset.thumbnail_status === "queued" || asset.thumbnail_status === "generating") return "生成中";
   switch (asset.asset_type) {
@@ -48,42 +49,53 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
 
   return (
     <section className="asset-grid">
-      {assets.map((asset) => (
-        <div
-          key={asset.id}
-          className={selectedIds.includes(asset.id) ? "asset-card selected" : "asset-card"}
-          onClick={() => toggle(asset.id)}
-          title={asset.absolute_path}
-          role="button"
-          tabIndex={0}
-        >
-          <div className="thumb">
-            {!asset.is_missing && asset.thumbnail_status === "ready" && asset.thumbnail_path && !failedIds.has(asset.id) ? (
-              <img
-                src={convertFileSrc(asset.thumbnail_path)}
-                alt=""
-                onError={() => markFailed(asset.id)}
-              />
-            ) : (
-              <span>{placeholderText(asset)}</span>
-            )}
-          </div>
-          <div className="asset-name">{asset.file_name}</div>
-          <div className="asset-meta">
-            {asset.width && asset.height ? `${asset.width}x${asset.height}` : asset.asset_type}
-          </div>
-          <button
-            className={asset.is_favorite ? "favorite active" : "favorite"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite(asset);
-            }}
-            title={asset.is_favorite ? "取消收藏" : "收藏"}
+      {assets.map((asset) => {
+        const imageLoadFailed = failedIds.has(asset.id);
+        const thumbnailPath = asset.thumbnail_path;
+        const canRenderThumbnail =
+          !asset.is_missing &&
+          asset.thumbnail_status === "ready" &&
+          typeof thumbnailPath === "string" &&
+          thumbnailPath.length > 0 &&
+          !imageLoadFailed;
+
+        return (
+          <div
+            key={asset.id}
+            className={selectedIds.includes(asset.id) ? "asset-card selected" : "asset-card"}
+            onClick={() => toggle(asset.id)}
+            title={asset.absolute_path}
+            role="button"
+            tabIndex={0}
           >
-            {asset.is_favorite ? "★" : "☆"}
-          </button>
-        </div>
-      ))}
+            <div className="thumb">
+              {canRenderThumbnail ? (
+                <img
+                  src={convertFileSrc(thumbnailPath)}
+                  alt=""
+                  onError={() => markFailed(asset.id)}
+                />
+              ) : (
+                <span>{placeholderText(asset, imageLoadFailed)}</span>
+              )}
+            </div>
+            <div className="asset-name">{asset.file_name}</div>
+            <div className="asset-meta">
+              {asset.width && asset.height ? `${asset.width}x${asset.height}` : asset.asset_type}
+            </div>
+            <button
+              className={asset.is_favorite ? "favorite active" : "favorite"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(asset);
+              }}
+              title={asset.is_favorite ? "取消收藏" : "收藏"}
+            >
+              {asset.is_favorite ? "★" : "☆"}
+            </button>
+          </div>
+        );
+      })}
     </section>
   );
 }

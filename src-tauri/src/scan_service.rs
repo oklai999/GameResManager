@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use chrono::Utc;
 use walkdir::WalkDir;
 use crate::db;
-use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, should_ignore_extension, asset_type_allowed, should_generate_thumbnail, ScannedAsset, THUMBNAIL_STATUS_NONE};
+use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, should_ignore_file, should_ignore_extension, asset_type_allowed, should_generate_thumbnail, ScannedAsset, THUMBNAIL_STATUS_NONE};
 use crate::models::AssetType;
 
 #[derive(Clone)]
@@ -364,6 +364,11 @@ pub async fn run_scan_job(
             }
 
             if !entry.file_type().is_file() {
+                continue;
+            }
+
+            if should_ignore_file(entry.path()) {
+                counters.skipped += 1;
                 continue;
             }
 
@@ -996,6 +1001,26 @@ mod tests {
         let asset = &assets[0];
         assert!(asset.thumbnail_path.is_none(), "audio should not have thumbnail");
         assert_eq!(asset.thumbnail_status, "none");
+    }
+
+    #[tokio::test]
+    async fn scan_skips_macos_metadata_files() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+        write_file(asset_dir, "._Archery.png", b"Mac OS X");
+        write_file(asset_dir, ".DS_Store", b"metadata");
+        write_file(asset_dir, "Archery.png", b"fake");
+
+        let job = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job.id).await.unwrap();
+
+        let assets = crate::db::list_assets(&db, 1000, 0).await.unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].file_name, "Archery.png");
+
+        let job = crate::db::latest_scan_job_for_folder(&db, folder.id).await.unwrap().unwrap();
+        assert_eq!(job.skipped_count, 2);
     }
 
     #[tokio::test]

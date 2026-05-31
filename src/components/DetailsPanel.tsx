@@ -136,6 +136,9 @@ export function DetailsPanel({
           {asset.thumbnail_status === "failed" && asset.thumbnail_error && (
             <div className="detail-row error-text">缩略图错误：{asset.thumbnail_error}</div>
           )}
+          {asset.thumbnail_status === "ready" && asset.thumbnail_path && (
+            <div className="detail-row path">缩略图缓存：{asset.thumbnail_path}</div>
+          )}
         </>
       )}
 
