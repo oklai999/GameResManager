@@ -1,8 +1,14 @@
 use anyhow::Context;
 use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, SqlitePool};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub type Db = SqlitePool;
+
+pub fn resolve_database_path(app_data_dir: &Path) -> anyhow::Result<PathBuf> {
+    std::fs::create_dir_all(app_data_dir)
+        .with_context(|| format!("failed to create app data directory: {}", app_data_dir.display()))?;
+    Ok(app_data_dir.join("data.sqlite"))
+}
 
 pub async fn connect(database_path: &Path) -> anyhow::Result<Db> {
     if let Some(parent) = database_path.parent() {
@@ -31,12 +37,13 @@ use chrono::Utc;
 use crate::models::{Asset, LibraryFolder};
 
 pub async fn create_library_folder(db: &Db, name: &str, path: &str) -> anyhow::Result<LibraryFolder> {
+    let normalized = crate::indexer::normalize_path(std::path::Path::new(path))?;
     let now = Utc::now().to_rfc3339();
     let result = sqlx::query(
         "INSERT INTO library_folders (name, path, created_at, is_enabled) VALUES (?1, ?2, ?3, 1)"
     )
     .bind(name)
-    .bind(path)
+    .bind(&normalized)
     .bind(&now)
     .execute(db)
     .await?;
@@ -44,7 +51,7 @@ pub async fn create_library_folder(db: &Db, name: &str, path: &str) -> anyhow::R
     Ok(LibraryFolder {
         id: result.last_insert_rowid(),
         name: name.to_string(),
-        path: path.to_string(),
+        path: normalized,
         created_at: now,
         last_scanned_at: None,
         is_enabled: true,
@@ -89,53 +96,6 @@ pub async fn list_assets(db: &Db, limit: i64, offset: i64) -> anyhow::Result<Vec
 }
 
 use crate::models::{ScanJob, ScanJobStatus, ScanSettings};
-use crate::indexer::ScannedAsset;
-
-pub async fn upsert_scanned_asset(
-    db: &Db,
-    library_folder_id: i64,
-    asset: &ScannedAsset,
-    thumbnail_path: Option<&str>,
-    width: Option<i64>,
-    height: Option<i64>,
-) -> anyhow::Result<()> {
-    let now = Utc::now().to_rfc3339();
-    sqlx::query(
-        "INSERT INTO assets (
-            library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
-            modified_at, width, height, thumbnail_path, created_at, updated_at
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-        ON CONFLICT(absolute_path) DO UPDATE SET
-            file_name = excluded.file_name,
-            extension = excluded.extension,
-            asset_type = excluded.asset_type,
-            file_size = excluded.file_size,
-            modified_at = excluded.modified_at,
-            width = excluded.width,
-            height = excluded.height,
-            thumbnail_path = excluded.thumbnail_path,
-            is_missing = 0,
-            updated_at = excluded.updated_at"
-    )
-    .bind(library_folder_id)
-    .bind(&asset.absolute_path)
-    .bind(&asset.file_name)
-    .bind(&asset.extension)
-    .bind(&asset.asset_type)
-    .bind(asset.file_size)
-    .bind(&asset.modified_at)
-    .bind(width)
-    .bind(height)
-    .bind(thumbnail_path)
-    .bind(&now)
-    .bind(&now)
-    .execute(db)
-    .await?;
-
-    Ok(())
-}
-
 use crate::tags::normalize_tag_name;
 
 pub async fn set_asset_favorite(db: &Db, asset_id: i64, is_favorite: bool) -> anyhow::Result<()> {
@@ -199,6 +159,37 @@ pub async fn get_folder_by_id(db: &Db, id: i64) -> anyhow::Result<Option<Library
     }))
 }
 
+pub async fn get_folder_by_path(db: &Db, path: &str) -> anyhow::Result<Option<LibraryFolder>> {
+    let normalized = crate::indexer::normalize_path(std::path::Path::new(path))?;
+    let row = sqlx::query_as::<_, (i64, String, String, String, Option<String>, i64)>(
+        "SELECT id, name, path, created_at, last_scanned_at, is_enabled FROM library_folders WHERE path = ?1"
+    )
+    .bind(&normalized)
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row.map(|row| LibraryFolder {
+        id: row.0,
+        name: row.1,
+        path: row.2,
+        created_at: row.3,
+        last_scanned_at: row.4,
+        is_enabled: row.5 == 1,
+    }))
+}
+
+pub async fn delete_library_folder(db: &Db, id: i64) -> anyhow::Result<bool> {
+    // Fail any running scan job first so the worker won't crash on a missing folder
+    if let Some(job) = running_scan_job_for_folder(db, id).await? {
+        fail_scan_job(db, job.id, "folder deleted").await?;
+    }
+    let rows = sqlx::query("DELETE FROM library_folders WHERE id = ?1")
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(rows.rows_affected() > 0)
+}
+
 pub async fn update_folder_last_scanned(db: &Db, id: i64) -> anyhow::Result<()> {
     sqlx::query("UPDATE library_folders SET last_scanned_at = ?1 WHERE id = ?2")
         .bind(Utc::now().to_rfc3339())
@@ -208,22 +199,6 @@ pub async fn update_folder_last_scanned(db: &Db, id: i64) -> anyhow::Result<()> 
     Ok(())
 }
 
-pub async fn mark_missing_assets(db: &Db, folder_id: i64, existing_paths: &[String]) -> anyhow::Result<u64> {
-    let placeholders: Vec<String> = existing_paths.iter().map(|_| "?".to_string()).collect();
-    let sql = format!(
-        "UPDATE assets SET is_missing = 1, updated_at = ?1 WHERE library_folder_id = ?2 AND absolute_path NOT IN ({})",
-        placeholders.join(",")
-    );
-    let mut query = sqlx::query(&sql)
-        .bind(Utc::now().to_rfc3339())
-        .bind(folder_id);
-    for path in existing_paths {
-        query = query.bind(path);
-    }
-    let result = query.execute(db).await?;
-    Ok(result.rows_affected())
-}
-
 pub async fn list_asset_tags_map(db: &Db) -> anyhow::Result<Vec<(i64, String)>> {
     let rows = sqlx::query_as::<_, (i64, String)>(
         "SELECT a.asset_id, t.name FROM asset_tags a JOIN tags t ON a.tag_id = t.id"
@@ -231,6 +206,114 @@ pub async fn list_asset_tags_map(db: &Db) -> anyhow::Result<Vec<(i64, String)>> 
     .fetch_all(db)
     .await?;
     Ok(rows)
+}
+
+pub async fn list_tags(db: &Db) -> anyhow::Result<Vec<crate::models::Tag>> {
+    let rows = sqlx::query_as::<_, crate::models::Tag>(
+        "SELECT id, name, color FROM tags ORDER BY name"
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn list_asset_tags(db: &Db, asset_id: i64) -> anyhow::Result<Vec<String>> {
+    let rows = sqlx::query_as::<_, (String,)>(
+        "SELECT t.name FROM asset_tags at JOIN tags t ON at.tag_id = t.id WHERE at.asset_id = ?1 ORDER BY t.name"
+    )
+    .bind(asset_id)
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+pub async fn list_common_tags(db: &Db, asset_ids: &[i64]) -> anyhow::Result<Vec<String>> {
+    if asset_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = asset_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT t.name FROM tags t
+         JOIN asset_tags at ON t.id = at.tag_id
+         WHERE at.asset_id IN ({})
+         GROUP BY t.id, t.name
+         HAVING COUNT(DISTINCT at.asset_id) = ?",
+        placeholders
+    );
+    let mut query = sqlx::query_as::<_, (String,)>(&sql);
+    for id in asset_ids {
+        query = query.bind(id);
+    }
+    query = query.bind(asset_ids.len() as i64);
+    let rows = query.fetch_all(db).await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+pub async fn list_collections(db: &Db) -> anyhow::Result<Vec<crate::models::Collection>> {
+    let rows = sqlx::query_as::<_, crate::models::Collection>(
+        "SELECT id, name, description FROM collections ORDER BY name"
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn create_collection(db: &Db, name: &str, description: &str) -> anyhow::Result<crate::models::Collection> {
+    let name = name.trim();
+    anyhow::ensure!(!name.is_empty(), "collection name cannot be empty");
+    let now = Utc::now().to_rfc3339();
+    let result = sqlx::query(
+        "INSERT INTO collections (name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)"
+    )
+    .bind(name)
+    .bind(description)
+    .bind(&now)
+    .bind(&now)
+    .execute(db)
+    .await?;
+    Ok(crate::models::Collection {
+        id: result.last_insert_rowid(),
+        name: name.to_string(),
+        description: description.to_string(),
+    })
+}
+
+pub async fn add_assets_to_collection(db: &Db, collection_id: i64, asset_ids: &[i64]) -> anyhow::Result<()> {
+    let now = Utc::now().to_rfc3339();
+    let mut tx = db.begin().await?;
+    for asset_id in asset_ids {
+        sqlx::query("INSERT OR IGNORE INTO collection_assets (collection_id, asset_id) VALUES (?1, ?2)")
+            .bind(collection_id)
+            .bind(asset_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query("UPDATE collections SET updated_at = ?1 WHERE id = ?2")
+        .bind(&now)
+        .bind(collection_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn remove_asset_from_collection(db: &Db, collection_id: i64, asset_id: i64) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM collection_assets WHERE collection_id = ?1 AND asset_id = ?2")
+        .bind(collection_id)
+        .bind(asset_id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub async fn list_collection_assets(db: &Db, collection_id: i64) -> anyhow::Result<Vec<i64>> {
+    let rows = sqlx::query_as::<_, (i64,)>(
+        "SELECT asset_id FROM collection_assets WHERE collection_id = ?1"
+    )
+    .bind(collection_id)
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
 pub async fn create_scan_job(db: &Db, folder_id: i64) -> anyhow::Result<ScanJob> {
@@ -261,6 +344,7 @@ pub async fn create_scan_job(db: &Db, folder_id: i64) -> anyhow::Result<ScanJob>
     })
 }
 
+#[cfg(test)]
 pub async fn get_scan_job(db: &Db, job_id: i64) -> anyhow::Result<Option<ScanJob>> {
     let row = sqlx::query_as::<_, (
         i64, i64, String, String, Option<String>, Option<String>, i64,
@@ -370,8 +454,8 @@ pub async fn update_scan_job_progress(
     sqlx::query(
         "UPDATE scan_jobs SET found_count = ?1, added_count = ?2, updated_count = ?3,
          unchanged_count = ?4, skipped_count = ?5,
-         current_path = CASE WHEN status = 'running' THEN ?6 ELSE current_path END
-         WHERE id = ?7"
+         current_path = ?6
+         WHERE id = ?7 AND status = 'running'"
     )
     .bind(found)
     .bind(added)
@@ -463,21 +547,6 @@ pub async fn cleanup_old_scan_jobs(db: &Db, retain_per_folder: i64) -> anyhow::R
     Ok(result.rows_affected())
 }
 
-pub async fn add_seen_paths(db: &Db, job_id: i64, paths: &[String]) -> anyhow::Result<()> {
-    let mut tx = db.begin().await?;
-    for path in paths {
-        sqlx::query(
-            "INSERT OR IGNORE INTO scan_seen_paths (scan_job_id, absolute_path) VALUES (?1, ?2)"
-        )
-        .bind(job_id)
-        .bind(path)
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
 pub async fn mark_missing_assets_from_seen(db: &Db, folder_id: i64, job_id: i64) -> anyhow::Result<u64> {
     let now = Utc::now().to_rfc3339();
     let result = sqlx::query(
@@ -499,11 +568,13 @@ pub async fn mark_missing_assets_from_seen(db: &Db, folder_id: i64, job_id: i64)
 
 pub async fn get_scan_settings(db: &Db) -> anyhow::Result<ScanSettings> {
     let row = sqlx::query_as::<_, (
-        i64, i64, i64, i64, i64, i64, i64, i64, i64, String, String
+        i64, i64, i64, i64, i64, i64, i64, i64, i64, String,
+        Option<String>, Option<String>, String, String
     )>(
         "SELECT id, include_images, include_audio, include_video, include_fonts,
                 include_models, include_spine, include_psd, generate_psd_thumbnails,
-                ignored_directory_names, updated_at
+                ignored_directory_names, thumbnail_cache_dir, database_path,
+                ignored_extensions, updated_at
          FROM scan_settings WHERE id = 1"
     )
     .fetch_one(db)
@@ -520,8 +591,23 @@ pub async fn get_scan_settings(db: &Db) -> anyhow::Result<ScanSettings> {
         include_psd: row.7 == 1,
         generate_psd_thumbnails: row.8 == 1,
         ignored_directory_names: row.9,
-        updated_at: row.10,
+        thumbnail_cache_dir: row.10,
+        database_path: row.11,
+        ignored_extensions: row.12,
+        updated_at: row.13,
     })
+}
+
+pub async fn ensure_app_paths(db: &Db, db_path: &str, thumb_dir: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE scan_settings SET database_path = COALESCE(database_path, ?1),
+         thumbnail_cache_dir = COALESCE(thumbnail_cache_dir, ?2) WHERE id = 1"
+    )
+    .bind(db_path)
+    .bind(thumb_dir)
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 pub async fn save_scan_settings(db: &Db, settings: &ScanSettings) -> anyhow::Result<()> {
@@ -530,7 +616,9 @@ pub async fn save_scan_settings(db: &Db, settings: &ScanSettings) -> anyhow::Res
         "UPDATE scan_settings SET
          include_images = ?1, include_audio = ?2, include_video = ?3, include_fonts = ?4,
          include_models = ?5, include_spine = ?6, include_psd = ?7,
-         generate_psd_thumbnails = ?8, ignored_directory_names = ?9, updated_at = ?10
+         generate_psd_thumbnails = ?8, ignored_directory_names = ?9,
+         thumbnail_cache_dir = ?10, database_path = ?11,
+         ignored_extensions = ?12, updated_at = ?13
          WHERE id = 1"
     )
     .bind(if settings.include_images { 1 } else { 0 })
@@ -542,21 +630,263 @@ pub async fn save_scan_settings(db: &Db, settings: &ScanSettings) -> anyhow::Res
     .bind(if settings.include_psd { 1 } else { 0 })
     .bind(if settings.generate_psd_thumbnails { 1 } else { 0 })
     .bind(&settings.ignored_directory_names)
+    .bind(&settings.thumbnail_cache_dir)
+    .bind(&settings.database_path)
+    .bind(&settings.ignored_extensions)
     .bind(&now)
     .execute(db)
     .await?;
     Ok(())
 }
 
-pub async fn mark_thumbnail_failed(db: &Db, asset_id: i64, message: &str) -> anyhow::Result<()> {
-    sqlx::query(
-        "UPDATE assets SET thumbnail_status = 'failed', thumbnail_error = ?1, updated_at = ?2 WHERE id = ?3"
+pub async fn update_asset_note(db: &Db, asset_id: i64, note: &str) -> anyhow::Result<Asset> {
+    let now = Utc::now().to_rfc3339();
+    sqlx::query("UPDATE assets SET note = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(note)
+        .bind(&now)
+        .bind(asset_id)
+        .execute(db)
+        .await?;
+
+    let row = sqlx::query_as::<_, Asset>(
+        "SELECT id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
+                modified_at, width, height, thumbnail_path, thumbnail_status, thumbnail_error, note, is_favorite, is_missing,
+                created_at, updated_at
+         FROM assets WHERE id = ?1"
     )
-    .bind(message)
-    .bind(Utc::now().to_rfc3339())
     .bind(asset_id)
-    .execute(db)
+    .fetch_one(db)
     .await?;
-    Ok(())
+
+    Ok(row)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn ensure_app_paths_sets_defaults_once() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE scan_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            include_images INTEGER NOT NULL DEFAULT 1,
+            include_audio INTEGER NOT NULL DEFAULT 1,
+            include_video INTEGER NOT NULL DEFAULT 1,
+            include_fonts INTEGER NOT NULL DEFAULT 1,
+            include_models INTEGER NOT NULL DEFAULT 1,
+            include_spine INTEGER NOT NULL DEFAULT 1,
+            include_psd INTEGER NOT NULL DEFAULT 1,
+            generate_psd_thumbnails INTEGER NOT NULL DEFAULT 0,
+            ignored_directory_names TEXT NOT NULL DEFAULT '',
+            thumbnail_cache_dir TEXT,
+            database_path TEXT,
+            ignored_extensions TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
+        )").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO scan_settings (id, updated_at) VALUES (1, 'now')")
+            .execute(&pool).await.unwrap();
+
+        ensure_app_paths(&pool, "first.db", "first-thumbs").await.unwrap();
+        ensure_app_paths(&pool, "second.db", "second-thumbs").await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT database_path, thumbnail_cache_dir FROM scan_settings WHERE id = 1"
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(row.0, "first.db");
+        assert_eq!(row.1, "first-thumbs");
+    }
+}
+
+#[cfg(test)]
+mod collections_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("CREATE TABLE collection_assets (collection_id INTEGER NOT NULL, asset_id INTEGER NOT NULL, PRIMARY KEY (collection_id, asset_id))")
+            .execute(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn create_collection_valid_name() {
+        let db = setup_db().await;
+        let col = create_collection(&db, "My Collection", "desc").await.unwrap();
+        assert_eq!(col.name, "My Collection");
+        assert_eq!(col.description, "desc");
+        assert!(col.id > 0);
+    }
+
+    #[tokio::test]
+    async fn create_collection_trims_whitespace() {
+        let db = setup_db().await;
+        let col = create_collection(&db, "  Trimmed  ", "").await.unwrap();
+        assert_eq!(col.name, "Trimmed");
+    }
+
+    #[tokio::test]
+    async fn create_collection_empty_name_fails() {
+        let db = setup_db().await;
+        let err = create_collection(&db, "", "").await.unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn create_collection_whitespace_only_fails() {
+        let db = setup_db().await;
+        let err = create_collection(&db, "   ", "").await.unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn list_collections_returns_sorted() {
+        let db = setup_db().await;
+        create_collection(&db, "B", "").await.unwrap();
+        create_collection(&db, "A", "").await.unwrap();
+        create_collection(&db, "C", "").await.unwrap();
+        let cols = list_collections(&db).await.unwrap();
+        assert_eq!(cols.len(), 3);
+        assert_eq!(cols[0].name, "A");
+        assert_eq!(cols[1].name, "B");
+        assert_eq!(cols[2].name, "C");
+    }
+
+    #[tokio::test]
+    async fn add_and_list_collection_assets() {
+        let db = setup_db().await;
+        let col = create_collection(&db, "Test", "").await.unwrap();
+        add_assets_to_collection(&db, col.id, &[1, 2, 3]).await.unwrap();
+        let ids = list_collection_assets(&db, col.id).await.unwrap();
+        assert_eq!(ids.len(), 3);
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&2));
+        assert!(ids.contains(&3));
+    }
+
+    #[tokio::test]
+    async fn add_duplicate_assets_is_idempotent() {
+        let db = setup_db().await;
+        let col = create_collection(&db, "Test", "").await.unwrap();
+        add_assets_to_collection(&db, col.id, &[1, 2]).await.unwrap();
+        add_assets_to_collection(&db, col.id, &[1, 3]).await.unwrap();
+        let ids = list_collection_assets(&db, col.id).await.unwrap();
+        assert_eq!(ids.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn remove_asset_from_collection_works() {
+        let db = setup_db().await;
+        let col = create_collection(&db, "Test", "").await.unwrap();
+        add_assets_to_collection(&db, col.id, &[1, 2]).await.unwrap();
+        remove_asset_from_collection(&db, col.id, 1).await.unwrap();
+        let ids = list_collection_assets(&db, col.id).await.unwrap();
+        assert_eq!(ids, vec![2]);
+    }
+}
+
+#[cfg(test)]
+mod scan_job_progress_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE scan_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                cancelled_at TEXT,
+                found_count INTEGER NOT NULL DEFAULT 0,
+                added_count INTEGER NOT NULL DEFAULT 0,
+                updated_count INTEGER NOT NULL DEFAULT 0,
+                unchanged_count INTEGER NOT NULL DEFAULT 0,
+                missing_count INTEGER NOT NULL DEFAULT 0,
+                skipped_count INTEGER NOT NULL DEFAULT 0,
+                current_path TEXT,
+                error_message TEXT
+            )"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    async fn insert_job(db: &Db, status: &str) -> i64 {
+        sqlx::query("INSERT INTO scan_jobs (library_folder_id, status, started_at, found_count, added_count, updated_count, unchanged_count, skipped_count, current_path) VALUES (1, ?1, 'now', 1, 2, 3, 4, 5, 'old')")
+            .bind(status)
+            .execute(db)
+            .await
+            .unwrap()
+            .last_insert_rowid()
+    }
+
+    async fn progress_row(db: &Db, job_id: i64) -> (i64, i64, i64, i64, i64, Option<String>) {
+        sqlx::query_as(
+            "SELECT found_count, added_count, updated_count, unchanged_count, skipped_count, current_path
+             FROM scan_jobs WHERE id = ?1"
+        )
+        .bind(job_id)
+        .fetch_one(db)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn update_scan_job_progress_updates_running_job() {
+        let db = setup_db().await;
+        let job_id = insert_job(&db, "running").await;
+
+        update_scan_job_progress(&db, job_id, 10, 11, 12, 13, 14, Some("new"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            progress_row(&db, job_id).await,
+            (10, 11, 12, 13, 14, Some("new".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn update_scan_job_progress_does_not_modify_cancelled_job() {
+        let db = setup_db().await;
+        let job_id = insert_job(&db, "cancelled").await;
+
+        update_scan_job_progress(&db, job_id, 10, 11, 12, 13, 14, Some("new"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            progress_row(&db, job_id).await,
+            (1, 2, 3, 4, 5, Some("old".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn update_scan_job_progress_does_not_modify_failed_or_completed_jobs() {
+        let db = setup_db().await;
+        let failed_id = insert_job(&db, "failed").await;
+        let completed_id = insert_job(&db, "completed").await;
+
+        update_scan_job_progress(&db, failed_id, 10, 11, 12, 13, 14, Some("new"))
+            .await
+            .unwrap();
+        update_scan_job_progress(&db, completed_id, 20, 21, 22, 23, 24, Some("newer"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            progress_row(&db, failed_id).await,
+            (1, 2, 3, 4, 5, Some("old".to_string()))
+        );
+        assert_eq!(
+            progress_row(&db, completed_id).await,
+            (1, 2, 3, 4, 5, Some("old".to_string()))
+        );
+    }
+}

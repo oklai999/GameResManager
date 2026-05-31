@@ -29,10 +29,6 @@ pub fn normalize_path(path: &Path) -> anyhow::Result<String> {
     Ok(absolute.to_string_lossy().replace('\\', "/"))
 }
 
-use chrono::{DateTime, Utc};
-use std::fs;
-use walkdir::WalkDir;
-
 pub const THUMBNAIL_STATUS_NONE: &str = "none";
 
 #[derive(Debug, Clone)]
@@ -68,71 +64,6 @@ impl Default for ScannedAsset {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ScanOutput {
-    pub assets: Vec<ScannedAsset>,
-    pub skipped_count: usize,
-}
-
-pub fn scan_folder(path: &Path) -> anyhow::Result<ScanOutput> {
-    let mut output = ScanOutput::default();
-
-    for entry in WalkDir::new(path).follow_links(false) {
-        let entry = match entry {
-            Ok(value) => value,
-            Err(_) => {
-                output.skipped_count += 1;
-                continue;
-            }
-        };
-
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let metadata = match fs::metadata(entry.path()) {
-            Ok(value) => value,
-            Err(_) => {
-                output.skipped_count += 1;
-                continue;
-            }
-        };
-
-        let asset_type = classify_asset(entry.path());
-        if asset_type == AssetType::Other {
-            output.skipped_count += 1;
-            continue;
-        }
-
-        let modified_at: DateTime<Utc> = metadata.modified()?.into();
-        let absolute_path = normalize_path(entry.path())?;
-        let file_name = entry
-            .path()
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let extension = entry
-            .path()
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-
-        output.assets.push(ScannedAsset {
-            absolute_path,
-            file_name,
-            extension,
-            asset_type: asset_type.as_str().to_string(),
-            file_size: metadata.len() as i64,
-            modified_at: modified_at.to_rfc3339(),
-            ..Default::default()
-        });
-    }
-
-    Ok(output)
-}
-
 pub fn should_ignore_dir(path: &Path, settings: &ScanSettings) -> bool {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return false;
@@ -140,6 +71,14 @@ pub fn should_ignore_dir(path: &Path, settings: &ScanSettings) -> bool {
     let name_lower = name.to_ascii_lowercase();
     settings.ignored_directory_names.split(',').any(|ignored| {
         ignored.trim().eq_ignore_ascii_case(&name_lower)
+    })
+}
+
+pub fn should_ignore_extension(ext: &str, settings: &ScanSettings) -> bool {
+    let ext_normalized = ext.to_ascii_lowercase().trim_start_matches('.').to_string();
+    settings.ignored_extensions.split(|c: char| c == ',' || c == '\n' || c == ' ').any(|ignored| {
+        let trimmed = ignored.trim().trim_start_matches('.');
+        !trimmed.is_empty() && trimmed.eq_ignore_ascii_case(&ext_normalized)
     })
 }
 
@@ -162,74 +101,6 @@ pub fn should_generate_thumbnail(extension: &str, settings: &ScanSettings) -> bo
         "psd" => settings.generate_psd_thumbnails,
         _ => false,
     }
-}
-
-pub fn scan_folder_with_settings(path: &Path, settings: &ScanSettings) -> anyhow::Result<ScanOutput> {
-    let mut output = ScanOutput::default();
-    let mut it = WalkDir::new(path).follow_links(false).into_iter();
-
-    while let Some(entry) = it.next() {
-        let entry = match entry {
-            Ok(value) => value,
-            Err(_) => {
-                output.skipped_count += 1;
-                continue;
-            }
-        };
-
-        if entry.file_type().is_dir() {
-            if should_ignore_dir(entry.path(), settings) {
-                it.skip_current_dir();
-            }
-            continue;
-        }
-
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let metadata = match fs::metadata(entry.path()) {
-            Ok(value) => value,
-            Err(_) => {
-                output.skipped_count += 1;
-                continue;
-            }
-        };
-
-        let asset_type = classify_asset(entry.path());
-        let extension = entry
-            .path()
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-
-        if asset_type == AssetType::Other || !asset_type_allowed(asset_type.as_str(), &extension, settings) {
-            output.skipped_count += 1;
-            continue;
-        }
-
-        let modified_at: DateTime<Utc> = metadata.modified()?.into();
-        let absolute_path = normalize_path(entry.path())?;
-        let file_name = entry
-            .path()
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-
-        output.assets.push(ScannedAsset {
-            absolute_path,
-            file_name,
-            extension,
-            asset_type: asset_type.as_str().to_string(),
-            file_size: metadata.len() as i64,
-            modified_at: modified_at.to_rfc3339(),
-            ..Default::default()
-        });
-    }
-
-    Ok(output)
 }
 
 #[cfg(test)]
@@ -270,7 +141,10 @@ mod tests {
             include_psd: true,
             generate_psd_thumbnails: false,
             ignored_directory_names: "node_modules,.git,target".to_string(),
-            updated_at: "2026-05-28T00:00:00Z".to_string(),
+            thumbnail_cache_dir: None,
+            database_path: None,
+            ignored_extensions: "".to_string(),
+updated_at: "2026-05-28T00:00:00Z".to_string(),
         };
         assert!(should_ignore_dir(Path::new("/project/node_modules"), &settings));
         assert!(should_ignore_dir(Path::new("/project/.git"), &settings));
@@ -291,7 +165,10 @@ mod tests {
             include_psd: true,
             generate_psd_thumbnails: false,
             ignored_directory_names: "".to_string(),
-            updated_at: "2026-05-28T00:00:00Z".to_string(),
+            thumbnail_cache_dir: None,
+            database_path: None,
+            ignored_extensions: "".to_string(),
+updated_at: "2026-05-28T00:00:00Z".to_string(),
         };
         assert!(!should_generate_thumbnail("psd", &settings));
         assert!(should_generate_thumbnail("png", &settings));
@@ -311,10 +188,62 @@ mod tests {
             include_psd: true,
             generate_psd_thumbnails: false,
             ignored_directory_names: "".to_string(),
-            updated_at: "2026-05-28T00:00:00Z".to_string(),
+            thumbnail_cache_dir: None,
+            database_path: None,
+            ignored_extensions: "".to_string(),
+updated_at: "2026-05-28T00:00:00Z".to_string(),
         };
         assert!(!asset_type_allowed("image", "png", &settings));
         assert!(asset_type_allowed("audio", "wav", &settings));
         assert!(asset_type_allowed("image", "psd", &settings));
+    }
+
+    #[test]
+    fn ignores_configured_extensions() {
+        let settings = ScanSettings {
+            id: 1,
+            include_images: true,
+            include_audio: true,
+            include_video: true,
+            include_fonts: true,
+            include_models: true,
+            include_spine: true,
+            include_psd: true,
+            generate_psd_thumbnails: false,
+            ignored_directory_names: "".to_string(),
+            thumbnail_cache_dir: None,
+            database_path: None,
+            ignored_extensions: "tmp, .log".to_string(),
+updated_at: "2026-05-28T00:00:00Z".to_string(),
+        };
+        assert!(should_ignore_extension("tmp", &settings));
+        assert!(should_ignore_extension("log", &settings));
+        assert!(should_ignore_extension(".log", &settings));
+        assert!(should_ignore_extension("TMP", &settings));
+        assert!(!should_ignore_extension("png", &settings));
+    }
+
+    #[test]
+    fn ignores_extensions_with_newlines_and_spaces() {
+        let settings = ScanSettings {
+            id: 1,
+            include_images: true,
+            include_audio: true,
+            include_video: true,
+            include_fonts: true,
+            include_models: true,
+            include_spine: true,
+            include_psd: true,
+            generate_psd_thumbnails: false,
+            ignored_directory_names: "".to_string(),
+            thumbnail_cache_dir: None,
+            database_path: None,
+            ignored_extensions: "bak\n.tmp .old".to_string(),
+updated_at: "2026-05-28T00:00:00Z".to_string(),
+        };
+        assert!(should_ignore_extension("bak", &settings));
+        assert!(should_ignore_extension("tmp", &settings));
+        assert!(should_ignore_extension("old", &settings));
+        assert!(!should_ignore_extension("png", &settings));
     }
 }

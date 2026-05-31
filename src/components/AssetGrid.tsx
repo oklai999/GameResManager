@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { Asset } from "../types/asset";
 
@@ -8,13 +9,41 @@ type Props = {
   onToggleFavorite: (asset: Asset) => void;
 };
 
+function placeholderText(asset: Asset): string {
+  if (asset.is_missing) return "缺失";
+  if (asset.thumbnail_status === "failed") return "缩略图失败";
+  if (asset.thumbnail_status === "queued" || asset.thumbnail_status === "generating") return "生成中";
+  switch (asset.asset_type) {
+    case "image":
+      return "无预览";
+    case "audio":
+      return "音频";
+    case "video":
+      return "视频";
+    case "font":
+      return "字体";
+    case "model3d":
+      return "3D";
+    case "spine":
+      return "Spine";
+    default:
+      return asset.extension.toUpperCase();
+  }
+}
+
 export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite }: Props) {
+  const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
+
   function toggle(assetId: number) {
     onSelectionChange(
       selectedIds.includes(assetId)
         ? selectedIds.filter((id) => id !== assetId)
         : [...selectedIds, assetId]
     );
+  }
+
+  function markFailed(assetId: number) {
+    setFailedIds((prev) => new Set(prev).add(assetId));
   }
 
   return (
@@ -29,14 +58,14 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
           tabIndex={0}
         >
           <div className="thumb">
-            {asset.thumbnail_path ? (
-              <img src={convertFileSrc(asset.thumbnail_path)} alt="" />
-            ) : asset.thumbnail_status === "failed" ? (
-              <span>缩略图失败</span>
-            ) : asset.thumbnail_status === "queued" || asset.thumbnail_status === "generating" ? (
-              <span>生成中</span>
+            {!asset.is_missing && asset.thumbnail_status === "ready" && asset.thumbnail_path && !failedIds.has(asset.id) ? (
+              <img
+                src={convertFileSrc(asset.thumbnail_path)}
+                alt=""
+                onError={() => markFailed(asset.id)}
+              />
             ) : (
-              <span>{asset.extension.toUpperCase()}</span>
+              <span>{placeholderText(asset)}</span>
             )}
           </div>
           <div className="asset-name">{asset.file_name}</div>

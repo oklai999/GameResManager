@@ -1,44 +1,78 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  addLibraryFolder,
+  addAssetsToCollection,
   applyTagToAssets,
   cancelScan,
+  createCollection,
+  createLibraryFolderFromPath,
+  deleteLibraryFolder,
   getScanSettings,
   latestScanJob,
   listAssets,
   listAssetTags,
+  listCollections,
   listLibraryFolders,
   openAssetFile,
+  pickLibraryFolder,
   revealAssetInFolder,
   saveScanSettings,
+  searchAssets,
   setAssetFavorite,
   startScan,
+  updateAssetNote,
 } from "./api/tauri";
 import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
+import { EmptyState } from "./components/EmptyState";
 import { LibrarySidebar } from "./components/LibrarySidebar";
-import { ScanSettingsPanel } from "./components/ScanSettingsPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
 import { SearchToolbar } from "./components/SearchToolbar";
-import type { Asset, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
+import { ToastProvider, useToast } from "./components/ToastHost";
+import type { Asset, AssetSearchRequest, Collection, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
 
-export default function App() {
+const SEARCH_RESULT_LIMIT = 2000;
+
+async function fetchLatestJobs(folderList: LibraryFolder[]) {
+  const jobs: Record<number, ScanJob | null> = {};
+  await Promise.all(
+    folderList.map(async (folder) => {
+      jobs[folder.id] = await latestScanJob(folder.id);
+    })
+  );
+  return jobs;
+}
+
+function AppInner() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>({ fileName: true, tag: true, note: true, path: false });
-  const [error, setError] = useState<string | null>(null);
   const [latestJobs, setLatestJobs] = useState<Record<number, ScanJob | null>>({});
   const [scanSettings, setScanSettings] = useState<ScanSettings | null>(null);
+  const { showToast } = useToast();
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  const [gridAssets, setGridAssets] = useState<Asset[]>([]);
+  const searchVersionRef = useRef(0);
+
+  const showError = useCallback((e: unknown) => {
+    showToast((e as any)?.message ?? String(e), "error");
+  }, [showToast]);
 
   const loadData = useCallback(async () => {
     try {
-      const [assetList, folderList, tagList] = await Promise.all([
+      const [assetList, folderList, tagList, collectionList] = await Promise.all([
         listAssets(),
         listLibraryFolders(),
         listAssetTags(),
+        listCollections(),
       ]);
       const tagMap = new Map<number, string[]>();
       for (const [assetId, tagName] of tagList) {
@@ -52,20 +86,21 @@ export default function App() {
       }));
       setAssets(assetsWithTags);
       setFolders(folderList);
+      setCollections(collectionList);
 
-      const jobs: Record<number, ScanJob | null> = {};
-      await Promise.all(
-        folderList.map(async (folder) => {
-          jobs[folder.id] = await latestScanJob(folder.id);
-        })
-      );
-      setLatestJobs(jobs);
-
-      setError(null);
+      setLatestJobs(await fetchLatestJobs(folderList));
     } catch (e) {
-      setError(String(e));
+      showError(e);
     }
-  }, []);
+  }, [showError]);
+
+  const refreshScanJobs = useCallback(async () => {
+    try {
+      setLatestJobs(await fetchLatestJobs(folders));
+    } catch (e) {
+      showError(e);
+    }
+  }, [folders, showError]);
 
   useEffect(() => {
     loadData();
@@ -73,71 +108,125 @@ export default function App() {
 
   useEffect(() => {
     const hasRunning = Object.values(latestJobs).some((j) => j?.status === "running");
-    if (!hasRunning) return;
-    const interval = setInterval(() => {
-      loadData();
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [latestJobs, loadData]);
+    setIsScanning(hasRunning);
+
+    if (!hasRunning && activeJobId != null) {
+      const completedJob = Object.values(latestJobs).find((j) => j?.id === activeJobId);
+      if (completedJob) {
+        const msg =
+          completedJob.status === "completed"
+            ? `扫描完成：发现 ${completedJob.found_count} 个，新增 ${completedJob.added_count}，更新 ${completedJob.updated_count}，未变化 ${completedJob.unchanged_count}，缺失 ${completedJob.missing_count}，跳过 ${completedJob.skipped_count}`
+            : completedJob.status === "cancelled"
+              ? "扫描已取消"
+              : `扫描失败：${completedJob.error_message ?? "未知错误"}`;
+        setScanMessage(msg);
+        setSelectedFolderId(null);
+        setSelectedIds([]);
+        setActiveJobId(null);
+        loadData();
+      }
+      return;
+    }
+
+    if (hasRunning) {
+      const interval = setInterval(() => {
+        refreshScanJobs();
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [latestJobs, loadData, refreshScanJobs, activeJobId]);
 
   useEffect(() => {
     getScanSettings()
       .then(setScanSettings)
-      .catch((e) => setError(String(e)));
-  }, []);
+      .catch(showError);
+  }, [showError]);
 
   const handleScanSettingsChange = useCallback(async (settings: ScanSettings) => {
     setScanSettings(settings);
     try {
       await saveScanSettings(settings);
-      setError(null);
     } catch (e) {
-      setError(String(e));
+      showError(e);
     }
-  }, []);
+  }, [showError]);
 
-  const filteredAssets = useMemo(() => {
-    return assets.filter((asset) => {
-      if (activeFilter === "favorites" && !asset.is_favorite) return false;
-      if (activeFilter === "missing" && !asset.is_missing) return false;
-      if (!["all", "favorites", "missing"].includes(activeFilter) && asset.asset_type !== activeFilter) return false;
-      const normalizedQuery = query.trim().toLowerCase();
-      if (!normalizedQuery) return true;
-      const haystacks = [
-        scope.fileName ? asset.file_name : "",
-        scope.note ? asset.note : "",
-        scope.path ? asset.absolute_path : "",
-        scope.tag ? (asset.tags ?? []).join(" ") : "",
-      ];
-      return haystacks.some((value) => value.toLowerCase().includes(normalizedQuery));
-    });
-  }, [activeFilter, assets, query, scope]);
-
-  const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
-
-  const handleAddFolder = useCallback(async (name: string, path: string) => {
-    if (!name.trim() || !path.trim()) {
-      setError("名称和路径不能为空");
-      return;
-    }
+  const executeSearch = useCallback(async () => {
+    const version = ++searchVersionRef.current;
     try {
-      await addLibraryFolder(name, path);
-      await loadData();
-      setError(null);
+      const normalizedQuery = query.trim();
+      const req: AssetSearchRequest = {
+        query: normalizedQuery,
+        search_file_name: scope.fileName,
+        search_note: scope.note,
+        search_path: scope.path,
+        search_tags: scope.tag,
+        asset_type: ["all", "favorites", "missing"].includes(activeFilter) ? null : activeFilter,
+        library_folder_id: selectedFolderId,
+        collection_id: selectedCollectionId,
+        is_favorite: activeFilter === "favorites" ? true : null,
+        is_missing: activeFilter === "missing" ? true : null,
+        limit: SEARCH_RESULT_LIMIT,
+        offset: 0,
+      };
+      let results = await searchAssets(req);
+      if (version !== searchVersionRef.current) return;
+
+      const tagMap = new Map<number, string[]>();
+      for (const asset of assets) {
+        if (asset.tags && asset.tags.length > 0) {
+          tagMap.set(asset.id, asset.tags);
+        }
+      }
+      results = results.map((a) => ({
+        ...a,
+        tags: tagMap.get(a.id) ?? [],
+      }));
+      if (version !== searchVersionRef.current) return;
+
+      setGridAssets(results);
     } catch (e) {
-      setError(String(e));
+      if (version !== searchVersionRef.current) return;
+      showError(e);
     }
-  }, [loadData]);
+  }, [query, scope, activeFilter, selectedFolderId, selectedCollectionId, assets, showError]);
+
+  useEffect(() => {
+    executeSearch();
+  }, [executeSearch]);
+
+  const displayAssets = gridAssets;
+
+  const selectedAssets = selectedIds
+    .map((id) => {
+      const fromGrid = gridAssets.find((a) => a.id === id);
+      if (fromGrid) return fromGrid;
+      return assets.find((a) => a.id === id);
+    })
+    .filter(Boolean) as Asset[];
+
+  const handlePickFolder = useCallback(async () => {
+    try {
+      const path = await pickLibraryFolder();
+      if (!path) return;
+      await createLibraryFolderFromPath(path);
+      await loadData();
+    } catch (e) {
+      showError(e);
+    }
+  }, [loadData, showError]);
 
   const handleScanFolder = useCallback(async (folderId: number) => {
     try {
+      setScanMessage(null);
+      setActiveJobId(null);
       const job = await startScan(folderId);
+      setActiveJobId(job.id);
       setLatestJobs((prev) => ({ ...prev, [folderId]: job }));
-      setError(null);
     } catch (e) {
-      setError(String(e));
+      showError(e);
     }
-  }, []);
+  }, [showError]);
 
   const handleCancelScan = useCallback(async (jobId: number) => {
     try {
@@ -151,73 +240,168 @@ export default function App() {
         }
         return next;
       });
-      setError(null);
+      setScanMessage("扫描已取消");
     } catch (e) {
-      setError(String(e));
+      showError(e);
     }
-  }, []);
+  }, [showError]);
 
   const handleToggleFavorite = useCallback(async (asset: Asset) => {
     try {
       await setAssetFavorite(asset.id, !asset.is_favorite);
-      setAssets((prev) =>
-        prev.map((a) => (a.id === asset.id ? { ...a, is_favorite: !a.is_favorite } : a))
-      );
-      setError(null);
+      const toggle = (a: Asset) => a.id === asset.id ? { ...a, is_favorite: !a.is_favorite } : a;
+      setAssets((prev) => prev.map(toggle));
+      setGridAssets((prev) => prev.map(toggle));
     } catch (e) {
-      setError(String(e));
+      showError(e);
     }
-  }, []);
+  }, [showError]);
 
   const handleApplyTag = useCallback(async (tagName: string, assetIds: number[]) => {
     try {
       await applyTagToAssets(tagName, assetIds);
       await loadData();
-      setError(null);
     } catch (e) {
-      setError(String(e));
+      showError(e);
     }
-  }, [loadData]);
+  }, [loadData, showError]);
+
+  const handleCreateCollection = useCallback(async (name: string) => {
+    try {
+      const col = await createCollection(name, "");
+      setCollections((prev) => [...prev, col].sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (e) {
+      showError(e);
+    }
+  }, [showError]);
+
+  const handleAddToCollection = useCallback(async (collectionId: number, assetIds: number[]) => {
+    try {
+      await addAssetsToCollection(collectionId, assetIds);
+      await executeSearch();
+    } catch (e) {
+      showError(e);
+    }
+  }, [executeSearch, showError]);
+
+  const handleUpdateNote = useCallback((updated: Asset) => {
+    setAssets((prev) => prev.map((a) => (a.id === updated.id ? { ...a, note: updated.note } : a)));
+    setGridAssets((prev) => prev.map((a) => (a.id === updated.id ? { ...a, note: updated.note } : a)));
+  }, []);
+
+  const handleOpenFile = useCallback(async (asset: Asset) => {
+    try {
+      await openAssetFile(asset.absolute_path);
+    } catch (e) {
+      showError(e);
+    }
+  }, [showError]);
+
+  const handleRevealFile = useCallback(async (asset: Asset) => {
+    try {
+      await revealAssetInFolder(asset.absolute_path);
+    } catch (e) {
+      showError(e);
+    }
+  }, [showError]);
+
+  const handleDeleteFolder = useCallback(async (folderId: number) => {
+    try {
+      await deleteLibraryFolder(folderId);
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(null);
+        setSelectedIds([]);
+      }
+      await loadData();
+    } catch (e) {
+      showError(e);
+    }
+  }, [loadData, selectedFolderId, showError]);
+
+  const handleCopyPath = useCallback(async (asset: Asset) => {
+    try {
+      await navigator.clipboard.writeText(asset.absolute_path);
+      showToast("路径已复制", "success");
+    } catch (e) {
+      showToast((e as any)?.message ?? "复制路径失败", "error");
+    }
+  }, [showToast]);
+
+  const isEmptySearch = displayAssets.length === 0;
+  const hasFolders = folders.length > 0;
+  const hasScanned = hasFolders && assets.length > 0;
+  const showSearchEmpty = query.trim() !== "" || activeFilter !== "all" || selectedFolderId != null || selectedCollectionId != null;
 
   return (
     <main className="app-shell">
       <LibrarySidebar
         folders={folders}
+        collections={collections}
         activeFilter={activeFilter}
-        onFilterChange={setActiveFilter}
-        onAddFolder={handleAddFolder}
+        selectedFolderId={selectedFolderId}
+        selectedCollectionId={selectedCollectionId}
+        onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
+        onSelectFolder={(id) => { setSelectedFolderId(id); setSelectedCollectionId(null); setSelectedIds([]); }}
+        onSelectCollection={(id) => { setSelectedCollectionId(id); setSelectedFolderId(null); setSelectedIds([]); }}
+        onPickFolder={handlePickFolder}
         onScanFolder={handleScanFolder}
         onCancelScan={handleCancelScan}
+        onDeleteFolder={handleDeleteFolder}
+        onCreateCollection={handleCreateCollection}
+        isScanning={isScanning}
         latestJobs={latestJobs}
-        error={error}
         settingsPanel={
           scanSettings ? (
-            <ScanSettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
+            <SettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
           ) : null
         }
       />
       <section className="workspace">
-        <SearchToolbar query={query} scope={scope} onQueryChange={setQuery} onScopeChange={setScope} />
+        <SearchToolbar query={query} scope={scope} onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }} onScopeChange={(s) => { setScope(s); setSelectedIds([]); }} />
+        {scanMessage && (
+          <div className="scan-summary" onClick={() => setScanMessage(null)}>
+            {scanMessage}
+          </div>
+        )}
         {Object.values(latestJobs)
           .filter(Boolean)
           .map((job) => (
             <ScanStatusBar key={job!.id} job={job!} />
           ))}
-        <AssetGrid
-          assets={filteredAssets}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          onToggleFavorite={handleToggleFavorite}
-        />
+        {!hasFolders ? (
+          <EmptyState variant="no-folders" />
+        ) : isEmptySearch && hasScanned ? (
+          <EmptyState variant="no-results" />
+        ) : !hasScanned ? (
+          <EmptyState variant="no-assets" />
+        ) : (
+          <AssetGrid
+            assets={displayAssets}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onToggleFavorite={handleToggleFavorite}
+          />
+        )}
       </section>
       <DetailsPanel
         selectedAssets={selectedAssets}
-        onOpenFile={(asset) => openAssetFile(asset.absolute_path)}
-        onReveal={(asset) => revealAssetInFolder(asset.absolute_path)}
-        onCopyPath={(asset) => navigator.clipboard.writeText(asset.absolute_path)}
+        collections={collections}
+        onOpenFile={handleOpenFile}
+        onReveal={handleRevealFile}
+        onCopyPath={handleCopyPath}
         onApplyTag={handleApplyTag}
         onToggleFavorite={handleToggleFavorite}
+        onAddToCollection={handleAddToCollection}
+        onUpdateNote={handleUpdateNote}
       />
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   );
 }

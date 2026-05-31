@@ -4,8 +4,8 @@ mod file_actions;
 mod indexer;
 mod models;
 mod scan_service;
+mod search;
 mod tags;
-mod thumbnail_queue;
 mod thumbnails;
 
 use std::path::PathBuf;
@@ -21,13 +21,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
-            let db_path = app_dir.join("data.sqlite");
+            let db_path = db::resolve_database_path(&app_dir)?;
             let pool = tauri::async_runtime::block_on(async {
                 db::connect(&db_path).await.map_err(|e| {
                     eprintln!("Database connection failed: {}", e);
                     e
                 })
             })?;
+            let ensure_pool = pool.clone();
             let cleanup_pool = pool.clone();
             app.manage(pool);
 
@@ -35,9 +36,14 @@ pub fn run() {
             if let Err(e) = std::fs::create_dir_all(&thumbnail_dir) {
                 eprintln!("Failed to create thumbnail directory: {}", e);
             }
-            app.manage(ThumbnailDir(thumbnail_dir));
+            app.manage(ThumbnailDir(thumbnail_dir.clone()));
             app.manage(scan_service::ScanRuntime::default());
-            app.manage(thumbnail_queue::ThumbnailRuntime::default());
+
+            let db_path_str = db_path.to_string_lossy().to_string();
+            let thumb_dir_str = thumbnail_dir.to_string_lossy().to_string();
+            tauri::async_runtime::block_on(async {
+                db::ensure_app_paths(&ensure_pool, &db_path_str, &thumb_dir_str).await
+            })?;
 
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = db::cleanup_old_scan_jobs(&cleanup_pool, 10).await {
@@ -55,12 +61,26 @@ pub fn run() {
             commands::open_asset_file,
             commands::reveal_asset_in_folder,
             commands::add_library_folder,
+            commands::pick_library_folder,
+            commands::create_library_folder_from_path,
+            commands::delete_library_folder,
             commands::list_asset_tags,
+            commands::list_tags,
+            commands::get_asset_tags,
+            commands::list_common_tags,
+            commands::list_collections,
+            commands::create_collection,
+            commands::add_assets_to_collection,
+            commands::remove_asset_from_collection,
+            commands::list_collection_assets,
+            commands::asset_thumbnail_url,
+            commands::update_asset_note,
             commands::start_scan,
             commands::cancel_scan,
             commands::latest_scan_job,
             commands::get_scan_settings,
-            commands::save_scan_settings
+            commands::save_scan_settings,
+            commands::search_assets
         ])
         .run(tauri::generate_context!())
         .expect("failed to run app");

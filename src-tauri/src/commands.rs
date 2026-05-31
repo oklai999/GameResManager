@@ -1,8 +1,9 @@
-use crate::{db, file_actions, scan_service, ThumbnailDir};
+use crate::{db, file_actions, indexer, scan_service, search, ThumbnailDir};
 use crate::scan_service::ScanRuntime;
 use serde::Serialize;
 use sqlx::SqlitePool;
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
 #[derive(Debug, Serialize)]
 pub struct CommandError {
@@ -81,6 +82,99 @@ pub async fn list_asset_tags(
     db::list_asset_tags_map(&*db).await.map_err(Into::into)
 }
 
+#[tauri::command]
+pub async fn list_tags(
+    db: State<'_, SqlitePool>,
+) -> Result<Vec<crate::models::Tag>, CommandError> {
+    db::list_tags(&*db).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn get_asset_tags(
+    db: State<'_, SqlitePool>,
+    asset_id: i64,
+) -> Result<Vec<String>, CommandError> {
+    db::list_asset_tags(&*db, asset_id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn list_common_tags(
+    db: State<'_, SqlitePool>,
+    asset_ids: Vec<i64>,
+) -> Result<Vec<String>, CommandError> {
+    db::list_common_tags(&*db, &asset_ids).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn list_collections(
+    db: State<'_, SqlitePool>,
+) -> Result<Vec<crate::models::Collection>, CommandError> {
+    db::list_collections(&*db).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn create_collection(
+    db: State<'_, SqlitePool>,
+    name: String,
+    description: String,
+) -> Result<crate::models::Collection, CommandError> {
+    db::create_collection(&*db, &name, &description).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn add_assets_to_collection(
+    db: State<'_, SqlitePool>,
+    collection_id: i64,
+    asset_ids: Vec<i64>,
+) -> Result<(), CommandError> {
+    db::add_assets_to_collection(&*db, collection_id, &asset_ids).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn remove_asset_from_collection(
+    db: State<'_, SqlitePool>,
+    collection_id: i64,
+    asset_id: i64,
+) -> Result<(), CommandError> {
+    db::remove_asset_from_collection(&*db, collection_id, asset_id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn list_collection_assets(
+    db: State<'_, SqlitePool>,
+    collection_id: i64,
+) -> Result<Vec<i64>, CommandError> {
+    db::list_collection_assets(&*db, collection_id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn update_asset_note(
+    db: State<'_, SqlitePool>,
+    asset_id: i64,
+    note: String,
+) -> Result<crate::models::Asset, CommandError> {
+    db::update_asset_note(&*db, asset_id, &note).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn asset_thumbnail_url(
+    db: State<'_, SqlitePool>,
+    asset_id: i64,
+) -> Result<Option<String>, CommandError> {
+    let row: Option<(Option<String>,)> = sqlx::query_as("SELECT thumbnail_path FROM assets WHERE id = ?1")
+        .bind(asset_id)
+        .fetch_optional(&*db)
+        .await
+        .map_err(CommandError::from)?;
+
+    if let Some((Some(path),)) = row {
+        if std::path::Path::new(&path).exists() {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
 fn is_unique_constraint_error(err: &anyhow::Error) -> bool {
     let sqlx_err = err.downcast_ref::<sqlx::Error>()
         .or_else(|| {
@@ -102,6 +196,9 @@ pub async fn start_scan(
     runtime: State<'_, ScanRuntime>,
     folder_id: i64,
 ) -> Result<crate::models::ScanJob, CommandError> {
+    let folder_lock = runtime.folder_lock(folder_id).await;
+    let _folder_guard = folder_lock.lock().await;
+
     let result = async {
         loop {
             let job = match db::create_scan_job(&*db, folder_id).await {
@@ -179,4 +276,57 @@ pub async fn save_scan_settings(
 ) -> Result<(), CommandError> {
     db::save_scan_settings(&*db, &settings).await.map_err(CommandError::from)?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn pick_library_folder(app: AppHandle) -> Option<String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .pick_folder(move |path| {
+            let _ = tx.send(path.map(|p| p.to_string().replace('\\', "/")));
+        });
+    rx.await.ok().flatten()
+}
+
+#[tauri::command]
+pub async fn search_assets(
+    db: State<'_, SqlitePool>,
+    req: crate::models::AssetSearchRequest,
+) -> Result<Vec<crate::models::Asset>, CommandError> {
+    search::search_assets(&*db, &req).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn delete_library_folder(
+    db: State<'_, SqlitePool>,
+    folder_id: i64,
+) -> Result<bool, CommandError> {
+    db::delete_library_folder(&*db, folder_id).await.map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn create_library_folder_from_path(
+    db: State<'_, SqlitePool>,
+    path: String,
+) -> Result<crate::models::LibraryFolder, CommandError> {
+    let normalized = indexer::normalize_path(std::path::Path::new(&path))
+        .map_err(|e| CommandError::from(anyhow::anyhow!("failed to normalize path: {}", e)))?;
+
+    let name = std::path::Path::new(&normalized)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let result = db::create_library_folder(&*db, &name, &normalized).await;
+    if let Err(ref e) = result {
+        if is_unique_constraint_error(e) {
+            return db::get_folder_by_path(&*db, &normalized)
+                .await
+                .map_err(CommandError::from)?
+                .ok_or_else(|| CommandError::from(anyhow::anyhow!("folder was not found after unique constraint")));
+        }
+    }
+    result.map_err(CommandError::from)
 }

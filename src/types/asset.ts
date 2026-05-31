@@ -55,6 +55,33 @@ export type ScanJob = {
   error_message: string | null;
 };
 
+export type AssetSearchRequest = {
+  query: string;
+  search_file_name: boolean;
+  search_note: boolean;
+  search_path: boolean;
+  search_tags: boolean;
+  asset_type: string | null;
+  library_folder_id: number | null;
+  collection_id: number | null;
+  is_favorite: boolean | null;
+  is_missing: boolean | null;
+  limit: number;
+  offset: number;
+};
+
+export type Tag = {
+  id: number;
+  name: string;
+  color: string;
+};
+
+export type Collection = {
+  id: number;
+  name: string;
+  description: string;
+};
+
 export type ScanSettings = {
   id: number;
   include_images: boolean;
@@ -66,5 +93,8 @@ export type ScanSettings = {
   include_psd: boolean;
   generate_psd_thumbnails: boolean;
   ignored_directory_names: string;
+  thumbnail_cache_dir: string | null;
+  database_path: string | null;
+  ignored_extensions: string;
   updated_at: string;
 };

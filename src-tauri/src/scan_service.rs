@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use chrono::Utc;
 use walkdir::WalkDir;
 use crate::db;
-use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, asset_type_allowed, should_generate_thumbnail, ScannedAsset};
+use crate::indexer::{classify_asset, normalize_path, should_ignore_dir, should_ignore_extension, asset_type_allowed, should_generate_thumbnail, ScannedAsset, THUMBNAIL_STATUS_NONE};
 use crate::models::AssetType;
 
 #[derive(Clone)]
@@ -12,6 +12,7 @@ pub struct ScanRuntime {
     cancelled: Arc<tokio::sync::Mutex<HashSet<i64>>>,
     active: Arc<tokio::sync::Mutex<HashSet<i64>>>,
     starting: Arc<tokio::sync::Mutex<HashMap<i64, i64>>>,
+    folder_locks: Arc<tokio::sync::Mutex<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl Default for ScanRuntime {
@@ -20,6 +21,7 @@ impl Default for ScanRuntime {
             cancelled: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
             active: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
             starting: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            folder_locks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         }
     }
 }
@@ -80,6 +82,11 @@ impl ScanRuntime {
     pub async fn is_starting_job(&self, folder_id: i64, job_id: i64) -> bool {
         self.starting.lock().await.get(&folder_id) == Some(&job_id)
     }
+
+    pub async fn folder_lock(&self, folder_id: i64) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.folder_locks.lock().await;
+        locks.entry(folder_id).or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))).clone()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -92,6 +99,7 @@ pub struct ScanCounters {
 }
 
 const SCAN_BATCH_SIZE: usize = 500;
+const THUMBNAIL_CONCURRENCY_LIMIT: usize = 4;
 
 async fn persist_batch(
     db_pool: &SqlitePool,
@@ -115,33 +123,51 @@ async fn persist_batch(
     if !batch.is_empty() {
         let placeholders: Vec<String> = batch.iter().map(|_| "?".to_string()).collect();
         let sql = format!(
-            "SELECT absolute_path, file_size, modified_at, is_missing FROM assets WHERE absolute_path IN ({})",
+            "SELECT absolute_path, file_size, modified_at, is_missing, thumbnail_status FROM assets WHERE absolute_path IN ({})",
             placeholders.join(",")
         );
-        let mut query = sqlx::query_as::<_, (String, i64, String, i64)>(&sql);
+        let mut query = sqlx::query_as::<_, (String, i64, String, i64, Option<String>)>(&sql);
         for asset in batch {
             query = query.bind(&asset.absolute_path);
         }
         let existing_rows = query.fetch_all(&mut *tx).await?;
-        let existing: std::collections::HashMap<String, (i64, String, bool)> = existing_rows
+        let existing: std::collections::HashMap<String, (i64, String, bool, Option<String>)> = existing_rows
             .into_iter()
-            .map(|r| (r.0, (r.1, r.2, r.3 == 1)))
+            .map(|r| (r.0, (r.1, r.2, r.3 == 1, r.4)))
             .collect();
 
         let now = Utc::now().to_rfc3339();
 
         for asset in batch {
-            if let Some((size, modified, was_missing)) = existing.get(&asset.absolute_path) {
+            if let Some((size, modified, was_missing, thumb_status)) = existing.get(&asset.absolute_path) {
                 if *size == asset.file_size && *modified == asset.modified_at {
                     counters.unchanged += 1;
-                    if *was_missing {
-                        sqlx::query(
-                            "UPDATE assets SET is_missing = 0, updated_at = ?1 WHERE absolute_path = ?2"
-                        )
-                        .bind(&now)
-                        .bind(&asset.absolute_path)
-                        .execute(&mut *tx)
-                        .await?;
+                    let needs_thumbnail_backfill = asset.thumbnail_status != THUMBNAIL_STATUS_NONE
+                        && thumb_status.as_deref() != Some("ready");
+                    if *was_missing || needs_thumbnail_backfill {
+                        if *was_missing && thumb_status.as_deref() == Some("ready") {
+                            // File reappeared unchanged with a ready thumbnail — just clear is_missing
+                            sqlx::query(
+                                "UPDATE assets SET is_missing = 0, updated_at = ?1 WHERE absolute_path = ?2"
+                            )
+                            .bind(&now)
+                            .bind(&asset.absolute_path)
+                            .execute(&mut *tx)
+                            .await?;
+                        } else {
+                            sqlx::query(
+                                "UPDATE assets SET is_missing = 0, thumbnail_path = ?1, width = ?2, height = ?3, thumbnail_status = ?4, thumbnail_error = ?5, updated_at = ?6 WHERE absolute_path = ?7"
+                            )
+                            .bind(asset.thumbnail_path.as_deref())
+                            .bind(asset.width)
+                            .bind(asset.height)
+                            .bind(&asset.thumbnail_status)
+                            .bind(asset.thumbnail_error.as_deref())
+                            .bind(&now)
+                            .bind(&asset.absolute_path)
+                            .execute(&mut *tx)
+                            .await?;
+                        }
                     }
                     continue;
                 }
@@ -213,23 +239,55 @@ async fn flush_batch(
         return Ok(());
     }
 
-    let mut handles = Vec::new();
-    for (idx, asset) in batch.iter().enumerate() {
-        if should_generate_thumbnail(&asset.extension, settings) {
-            let abs_path = asset.absolute_path.clone();
-            let modified = asset.modified_at.clone();
-            let thumb_dir = thumbnail_dir.to_path_buf();
-            let handle = tokio::spawn(async move {
-                let result = crate::thumbnails::generate_image_thumbnail_async(
-                    std::path::Path::new(&abs_path),
-                    &abs_path,
-                    &modified,
-                    &thumb_dir,
-                ).await;
-                (idx, result)
-            });
-            handles.push(handle);
+    // Load existing rows to skip thumbnail generation for unchanged+ready assets
+    let unchanged_ready: std::collections::HashSet<String> = {
+        let placeholders: Vec<String> = batch.iter().map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "SELECT absolute_path, file_size, modified_at, thumbnail_status FROM assets WHERE absolute_path IN ({})",
+            placeholders.join(",")
+        );
+        let mut query = sqlx::query_as::<_, (String, i64, String, Option<String>)>(&sql);
+        for asset in batch.iter() {
+            query = query.bind(&asset.absolute_path);
         }
+        let rows = query.fetch_all(db_pool).await?;
+        rows.into_iter()
+            .filter(|r| r.3.as_deref() == Some("ready"))
+            .filter(|r| {
+                batch.iter().any(|a| a.absolute_path == r.0 && a.file_size == r.1 && a.modified_at == r.2)
+            })
+            .map(|r| r.0)
+            .collect()
+    };
+
+    let mut handles = Vec::new();
+    let thumbnail_semaphore = Arc::new(tokio::sync::Semaphore::new(THUMBNAIL_CONCURRENCY_LIMIT));
+    for (idx, asset) in batch.iter().enumerate() {
+        if !should_generate_thumbnail(&asset.extension, settings) {
+            continue;
+        }
+        if unchanged_ready.contains(&asset.absolute_path) {
+            continue;
+        }
+        let abs_path = asset.absolute_path.clone();
+        let modified = asset.modified_at.clone();
+        let thumb_dir = thumbnail_dir.to_path_buf();
+        let semaphore = thumbnail_semaphore.clone();
+        let handle = tokio::spawn(async move {
+            let result = match semaphore.acquire_owned().await {
+                Ok(_permit) => {
+                    crate::thumbnails::generate_image_thumbnail_async(
+                        std::path::Path::new(&abs_path),
+                        &abs_path,
+                        &modified,
+                        &thumb_dir,
+                    ).await
+                }
+                Err(e) => Err(anyhow::anyhow!("thumbnail semaphore closed: {}", e)),
+            };
+            (idx, result)
+        });
+        handles.push(handle);
     }
 
     for handle in handles {
@@ -243,7 +301,7 @@ async fn flush_batch(
             }
             Err(e) => {
                 batch[idx].thumbnail_status = "failed".to_string();
-                batch[idx].thumbnail_error = Some(e.to_string());
+                batch[idx].thumbnail_error = Some(format!("{:#}", e));
             }
         }
     }
@@ -325,7 +383,7 @@ pub async fn run_scan_job(
                 .unwrap_or_default()
                 .to_ascii_lowercase();
 
-            if asset_type == AssetType::Other || !asset_type_allowed(asset_type.as_str(), &extension, &settings) {
+            if asset_type == AssetType::Other || !asset_type_allowed(asset_type.as_str(), &extension, &settings) || should_ignore_extension(&extension, &settings) {
                 counters.skipped += 1;
                 continue;
             }
@@ -941,6 +999,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unchanged_ready_thumbnail_is_not_replaced() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+        let img = image::RgbImage::new(10, 10);
+        let png_path = asset_dir.join("icon.png");
+        img.save(&png_path).unwrap();
+
+        let job1 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job1.id).await.unwrap();
+        let first = crate::db::list_assets(&db, 1000, 0).await.unwrap().remove(0);
+
+        let job2 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job2.id).await.unwrap();
+        let second = crate::db::list_assets(&db, 1000, 0).await.unwrap().remove(0);
+        let latest = crate::db::latest_scan_job_for_folder(&db, folder.id).await.unwrap().unwrap();
+
+        assert_eq!(second.thumbnail_path, first.thumbnail_path);
+        assert_eq!(second.thumbnail_status, "ready");
+        assert_eq!(latest.unchanged_count, 1);
+    }
+
+    #[tokio::test]
+    async fn was_missing_unchanged_preserves_ready_thumbnail() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+
+        // Create a real PNG and scan it
+        let img = image::RgbImage::new(10, 10);
+        let png_path = asset_dir.join("icon.png");
+        img.save(&png_path).unwrap();
+
+        let job1 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job1.id).await.unwrap();
+        let asset = crate::db::list_assets(&db, 1000, 0).await.unwrap().remove(0);
+        assert_eq!(asset.thumbnail_status, "ready");
+        let saved_thumb = asset.thumbnail_path.clone();
+
+        // Simulate file was missing in a previous scan
+        sqlx::query("UPDATE assets SET is_missing = 1 WHERE id = ?1")
+            .bind(asset.id)
+            .execute(&db).await.unwrap();
+
+        // Rescan — file is unchanged and exists again
+        let job2 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job2.id).await.unwrap();
+
+        let asset = crate::db::list_assets(&db, 1000, 0).await.unwrap().remove(0);
+        assert!(!asset.is_missing, "is_missing should be cleared");
+        assert_eq!(asset.thumbnail_path, saved_thumb, "ready thumbnail should be preserved");
+        assert_eq!(asset.thumbnail_status, "ready", "thumbnail_status should remain ready");
+    }
+
+    #[tokio::test]
     async fn rescan_unchanged_preserves_thumbnail() {
         let (db, tmp) = setup_test_db().await;
         let folder = create_test_folder(&db, &tmp, "assets").await;
@@ -964,4 +1077,5 @@ mod tests {
         assert_eq!(assets[0].thumbnail_path, first_thumb, "thumbnail_path should be preserved");
         assert_eq!(assets[0].thumbnail_status, first_status, "thumbnail_status should be preserved");
     }
+
 }

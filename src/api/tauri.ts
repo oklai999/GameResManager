@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Asset, LibraryFolder, ScanJob, ScanSettings } from "../types/asset";
+import type { Asset, AssetSearchRequest, Collection, LibraryFolder, ScanJob, ScanSettings, Tag } from "../types/asset";
 
 export async function listAssets(): Promise<Asset[]> {
   return invoke<Asset[]>("list_assets");
@@ -13,8 +13,28 @@ export async function addLibraryFolder(name: string, path: string): Promise<Libr
   return invoke<LibraryFolder>("add_library_folder", { name, path });
 }
 
+export async function pickLibraryFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_library_folder");
+}
+
+export async function createLibraryFolderFromPath(path: string): Promise<LibraryFolder> {
+  return invoke<LibraryFolder>("create_library_folder_from_path", { path });
+}
+
 export async function listAssetTags(): Promise<[number, string][]> {
   return invoke<[number, string][]>("list_asset_tags");
+}
+
+export async function listTags(): Promise<Tag[]> {
+  return invoke<Tag[]>("list_tags");
+}
+
+export async function getAssetTags(assetId: number): Promise<string[]> {
+  return invoke<string[]>("get_asset_tags", { assetId });
+}
+
+export async function listCommonTags(assetIds: number[]): Promise<string[]> {
+  return invoke<string[]>("list_common_tags", { assetIds });
 }
 
 export async function setAssetFavorite(assetId: number, isFavorite: boolean): Promise<void> {
@@ -51,4 +71,40 @@ export async function getScanSettings(): Promise<ScanSettings> {
 
 export async function saveScanSettings(settings: ScanSettings): Promise<void> {
   await invoke("save_scan_settings", { settings });
+}
+
+export async function searchAssets(req: AssetSearchRequest): Promise<Asset[]> {
+  return invoke<Asset[]>("search_assets", { req });
+}
+
+export async function listCollections(): Promise<Collection[]> {
+  return invoke<Collection[]>("list_collections");
+}
+
+export async function createCollection(name: string, description: string): Promise<Collection> {
+  return invoke<Collection>("create_collection", { name, description });
+}
+
+export async function addAssetsToCollection(collectionId: number, assetIds: number[]): Promise<void> {
+  await invoke("add_assets_to_collection", { collectionId, assetIds });
+}
+
+export async function removeAssetFromCollection(collectionId: number, assetId: number): Promise<void> {
+  await invoke("remove_asset_from_collection", { collectionId, assetId });
+}
+
+export async function listCollectionAssets(collectionId: number): Promise<number[]> {
+  return invoke<number[]>("list_collection_assets", { collectionId });
+}
+
+export async function assetThumbnailUrl(assetId: number): Promise<string | null> {
+  return invoke<string | null>("asset_thumbnail_url", { assetId });
+}
+
+export async function deleteLibraryFolder(folderId: number): Promise<boolean> {
+  return invoke<boolean>("delete_library_folder", { folderId });
+}
+
+export async function updateAssetNote(assetId: number, note: string): Promise<Asset> {
+  return invoke<Asset>("update_asset_note", { assetId, note });
 }

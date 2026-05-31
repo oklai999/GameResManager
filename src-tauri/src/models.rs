@@ -58,14 +58,14 @@ pub struct Asset {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Tag {
     pub id: i64,
     pub name: String,
     pub color: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Collection {
     pub id: i64,
     pub name: String,
@@ -79,17 +79,6 @@ pub enum ScanJobStatus {
     Completed,
     Failed,
     Cancelled,
-}
-
-impl ScanJobStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Running => "running",
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
 }
 
 impl std::str::FromStr for ScanJobStatus {
@@ -136,53 +125,25 @@ pub struct ScanSettings {
     pub include_psd: bool,
     pub generate_psd_thumbnails: bool,
     pub ignored_directory_names: String,
+    pub thumbnail_cache_dir: Option<String>,
+    pub database_path: Option<String>,
+    pub ignored_extensions: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScanProgress {
-    pub found_count: i64,
-    pub added_count: i64,
-    pub updated_count: i64,
-    pub unchanged_count: i64,
-    pub missing_count: i64,
-    pub skipped_count: i64,
-    pub current_path: Option<String>,
+pub struct AssetSearchRequest {
+    pub query: String,
+    pub search_file_name: bool,
+    pub search_note: bool,
+    pub search_path: bool,
+    pub search_tags: bool,
+    pub asset_type: Option<String>,
+    pub library_folder_id: Option<i64>,
+    pub collection_id: Option<i64>,
+    pub is_favorite: Option<bool>,
+    pub is_missing: Option<bool>,
+    pub limit: i64,
+    pub offset: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ThumbnailStatus {
-    None,
-    Queued,
-    Generating,
-    Ready,
-    Failed,
-}
-
-impl ThumbnailStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Queued => "queued",
-            Self::Generating => "generating",
-            Self::Ready => "ready",
-            Self::Failed => "failed",
-        }
-    }
-}
-
-impl std::str::FromStr for ThumbnailStatus {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "none" => Ok(Self::None),
-            "queued" => Ok(Self::Queued),
-            "generating" => Ok(Self::Generating),
-            "ready" => Ok(Self::Ready),
-            "failed" => Ok(Self::Failed),
-            _ => Err(anyhow::anyhow!("unknown thumbnail status: {}", s)),
-        }
-    }
-}
