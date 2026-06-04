@@ -89,3 +89,29 @@ Use `G:\资源\2D游戏资源_淘宝\` or equivalent large local folder (about 6
 - [ ] Confirm ignored directories (`node_modules`, `.git`, `.godot`, `target`, `dist`, `build`, `.codex_spreadsheet_tinyswords`) are skipped.
 - [ ] Confirm PSD files are indexed but do not generate thumbnails by default.
 - [ ] Confirm source asset files are untouched (no delete, move, rename, or modification).
+
+---
+
+## Type Coverage + Placeholder Smoke Test
+
+Use a fixture folder with the newly covered formats.
+
+- [ ] Create or choose a local fixture folder outside the repository with:
+  - `concept.psd`
+  - `hero.spine`
+  - `music.aac`
+  - `loop.m4a`
+  - `preview.mkv`
+  - `mesh.usdz`
+- [ ] Add the folder as a resource library.
+- [ ] Run scan and wait for completion.
+- [ ] Confirm every file appears in the grid with the correct type badge.
+- [ ] Confirm PSD cards show placeholder text **PSD** (not "无预览").
+- [ ] Confirm Spine cards show placeholder text **Spine** and badge label **Spine**.
+- [ ] Confirm 3D/USDZ cards show placeholder text **3D**.
+- [ ] Confirm AAC and M4A files are classified as **audio**.
+- [ ] Confirm MKV files are classified as **video**.
+- [ ] Confirm plain image assets without thumbnails show placeholder text **图片** (not "无预览").
+- [ ] Confirm search, filter, and details panel do not fall back to vague "无预览" for any of the above types.
+- [ ] Select each file and confirm the details panel still shows path, size, modified time, open file, open folder, and copy path.
+- [ ] Confirm no source file is deleted, moved, renamed, or modified.
