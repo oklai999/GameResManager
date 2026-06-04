@@ -306,6 +306,22 @@ pub async fn delete_library_folder(
 }
 
 #[tauri::command]
+pub async fn open_library_folder(path: String) -> Result<(), CommandError> {
+    file_actions::open_folder(&path).map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn get_folder_asset_counts(
+    db: State<'_, SqlitePool>,
+    folder_id: i64,
+) -> Result<crate::models::FolderAssetCounts, CommandError> {
+    let folder = db::get_folder_by_id(&*db, folder_id).await.map_err(CommandError::from)?;
+    let path = folder.map(|f| f.path).unwrap_or_default();
+    let (total, missing, is_accessible) = db::count_assets_by_folder(&*db, folder_id, &path).await.map_err(CommandError::from)?;
+    Ok(crate::models::FolderAssetCounts { folder_id, total, missing, is_accessible })
+}
+
+#[tauri::command]
 pub async fn create_library_folder_from_path(
     db: State<'_, SqlitePool>,
     path: String,

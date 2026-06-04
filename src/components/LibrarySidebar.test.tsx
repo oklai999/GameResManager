@@ -29,9 +29,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -57,9 +59,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={onScanFolder}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -85,9 +89,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -114,9 +120,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={onScanFolder}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -142,9 +150,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={true}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -169,9 +179,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -197,9 +209,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -228,9 +242,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={onCreateCollection}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -258,9 +274,11 @@ describe("LibrarySidebar", () => {
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
         onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
         onCreateCollection={vi.fn()}
         isScanning={false}
         latestJobs={{}}
+        folderCounts={{}}
         settingsPanel={null}
       />
     );
@@ -272,6 +290,156 @@ describe("LibrarySidebar", () => {
     );
     expect(screen.queryByTitle("删除文件夹")).not.toBeInTheDocument();
 
+    confirmSpy.mockRestore();
+  });
+
+  it("calls onOpenFolder when open folder button is clicked", async () => {
+    const onOpenFolder = vi.fn();
+    const folder = makeFolder(1, "Assets");
+    render(
+      <LibrarySidebar
+        folders={[folder]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={onOpenFolder}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByTitle("打开文件夹"));
+
+    expect(onOpenFolder).toHaveBeenCalledWith(folder);
+  });
+
+  it("displays folder asset counts and missing info", () => {
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{ 1: { folder_id: 1, total: 12, missing: 3, is_accessible: true } }}
+        settingsPanel={null}
+      />
+    );
+
+    expect(screen.getByText(/12 个资源/)).toBeInTheDocument();
+    expect(screen.getByText(/3 个缺失/)).toBeInTheDocument();
+  });
+
+  it("displays inaccessible status when folder path is not accessible", () => {
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{ 1: { folder_id: 1, total: 5, missing: 0, is_accessible: false } }}
+        settingsPanel={null}
+      />
+    );
+
+    expect(screen.getByText(/路径不可访问/)).toBeInTheDocument();
+  });
+
+  it("does not call onDeleteFolder when removal is cancelled", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onDeleteFolder = vi.fn();
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={onDeleteFolder}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByTitle("从资源库移除索引"));
+
+    expect(onDeleteFolder).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("calls onDeleteFolder when removal is confirmed", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onDeleteFolder = vi.fn();
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={onDeleteFolder}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByTitle("从资源库移除索引"));
+
+    expect(onDeleteFolder).toHaveBeenCalledWith(1);
     confirmSpy.mockRestore();
   });
 });

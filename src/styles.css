@@ -15,7 +15,8 @@ body {
 .app-shell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 340px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #101218;
 }
 
@@ -23,7 +24,9 @@ body {
 .workspace,
 .details-panel {
   min-width: 0;
+  min-height: 0;
   border-color: #242938;
+  overflow-y: auto;
 }
 
 .sidebar {
@@ -186,15 +189,44 @@ body {
 
 .folder-row {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.folder-row-header {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  cursor: pointer;
+}
+
+.folder-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.folder-row-meta {
+  font-size: 11px;
+  color: #8f9aaf;
+  line-height: 1.4;
 }
 
 .folder-row.active {
   border-color: #5b8def;
   background: #1b2840;
+}
+
+.open-folder-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: #1b2840;
+  border: 1px solid #2d3447;
+  color: #d8deea;
+  cursor: pointer;
 }
 
 .scan-btn:disabled {

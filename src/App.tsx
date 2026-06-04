@@ -6,6 +6,7 @@ import {
   createCollection,
   createLibraryFolderFromPath,
   deleteLibraryFolder,
+  getFolderAssetCounts,
   getScanSettings,
   latestScanJob,
   listAssets,
@@ -13,6 +14,7 @@ import {
   listCollections,
   listLibraryFolders,
   openAssetFile,
+  openLibraryFolder,
   pickLibraryFolder,
   revealAssetInFolder,
   saveScanSettings,
@@ -29,7 +31,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
 import { SearchToolbar } from "./components/SearchToolbar";
 import { ToastProvider, useToast } from "./components/ToastHost";
-import type { Asset, AssetSearchRequest, Collection, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
+import type { Asset, AssetSearchRequest, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
 
 const SEARCH_RESULT_LIMIT = 2000;
 
@@ -60,6 +62,7 @@ function AppInner() {
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [gridAssets, setGridAssets] = useState<Asset[]>([]);
+  const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
   const searchVersionRef = useRef(0);
 
   const showError = useCallback((e: unknown) => {
@@ -89,6 +92,18 @@ function AppInner() {
       setCollections(collectionList);
 
       setLatestJobs(await fetchLatestJobs(folderList));
+
+      const counts: Record<number, FolderAssetCounts> = {};
+      await Promise.all(
+        folderList.map(async (f) => {
+          try {
+            counts[f.id] = await getFolderAssetCounts(f.id);
+          } catch {
+            counts[f.id] = { folder_id: f.id, total: 0, missing: 0, is_accessible: false };
+          }
+        })
+      );
+      setFolderCounts(counts);
     } catch (e) {
       showError(e);
     }
@@ -318,6 +333,14 @@ function AppInner() {
     }
   }, [loadData, selectedFolderId, showError]);
 
+  const handleOpenFolder = useCallback(async (folder: LibraryFolder) => {
+    try {
+      await openLibraryFolder(folder.path);
+    } catch (e) {
+      showError(e);
+    }
+  }, [showError]);
+
   const handleCopyPath = useCallback(async (asset: Asset) => {
     try {
       await navigator.clipboard.writeText(asset.absolute_path);
@@ -347,9 +370,11 @@ function AppInner() {
         onScanFolder={handleScanFolder}
         onCancelScan={handleCancelScan}
         onDeleteFolder={handleDeleteFolder}
+        onOpenFolder={handleOpenFolder}
         onCreateCollection={handleCreateCollection}
         isScanning={isScanning}
         latestJobs={latestJobs}
+        folderCounts={folderCounts}
         settingsPanel={
           scanSettings ? (
             <SettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Asset, AssetSearchRequest, Collection, LibraryFolder, ScanJob, ScanSettings, Tag } from "../types/asset";
+import type { Asset, AssetSearchRequest, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, Tag } from "../types/asset";
 
 export async function listAssets(): Promise<Asset[]> {
   return invoke<Asset[]>("list_assets");
@@ -103,6 +103,14 @@ export async function assetThumbnailUrl(assetId: number): Promise<string | null>
 
 export async function deleteLibraryFolder(folderId: number): Promise<boolean> {
   return invoke<boolean>("delete_library_folder", { folderId });
+}
+
+export async function openLibraryFolder(path: string): Promise<void> {
+  await invoke("open_library_folder", { path });
+}
+
+export async function getFolderAssetCounts(folderId: number): Promise<FolderAssetCounts> {
+  return invoke<FolderAssetCounts>("get_folder_asset_counts", { folderId });
 }
 
 export async function updateAssetNote(assetId: number, note: string): Promise<Asset> {

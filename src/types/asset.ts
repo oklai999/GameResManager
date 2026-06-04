@@ -82,6 +82,13 @@ export type Collection = {
   description: string;
 };
 
+export type FolderAssetCounts = {
+  folder_id: number;
+  total: number;
+  missing: number;
+  is_accessible: boolean;
+};
+
 export type ScanSettings = {
   id: number;
   include_images: boolean;

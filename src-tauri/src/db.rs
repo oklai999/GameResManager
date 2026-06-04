@@ -194,6 +194,18 @@ pub async fn delete_library_folder(db: &Db, id: i64) -> anyhow::Result<bool> {
     Ok(rows.rows_affected() > 0)
 }
 
+pub async fn count_assets_by_folder(db: &Db, folder_id: i64, path: &str) -> anyhow::Result<(i64, i64, bool)> {
+    let row: (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_missing = 1 THEN 1 ELSE 0 END), 0)
+         FROM assets WHERE library_folder_id = ?1"
+    )
+    .bind(folder_id)
+    .fetch_one(db)
+    .await?;
+    let is_accessible = std::path::Path::new(path).exists();
+    Ok((row.0, row.1, is_accessible))
+}
+
 pub async fn update_folder_last_scanned(db: &Db, id: i64) -> anyhow::Result<()> {
     sqlx::query("UPDATE library_folders SET last_scanned_at = ?1 WHERE id = ?2")
         .bind(Utc::now().to_rfc3339())
@@ -955,5 +967,168 @@ mod list_assets_filter_tests {
         let assets = list_assets(&db, 100, 0).await.unwrap();
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].file_name, "icon.png");
+    }
+}
+
+#[cfg(test)]
+mod folder_management_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE library_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_scanned_at TEXT,
+                is_enabled INTEGER NOT NULL DEFAULT 1
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (library_folder_id) REFERENCES library_folders(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id),
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE collections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE collection_assets (
+                collection_id INTEGER NOT NULL,
+                asset_id INTEGER NOT NULL,
+                PRIMARY KEY (collection_id, asset_id),
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE scan_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                cancelled_at TEXT,
+                found_count INTEGER NOT NULL DEFAULT 0,
+                added_count INTEGER NOT NULL DEFAULT 0,
+                updated_count INTEGER NOT NULL DEFAULT 0,
+                unchanged_count INTEGER NOT NULL DEFAULT 0,
+                missing_count INTEGER NOT NULL DEFAULT 0,
+                skipped_count INTEGER NOT NULL DEFAULT 0,
+                current_path TEXT,
+                error_message TEXT,
+                FOREIGN KEY (library_folder_id) REFERENCES library_folders(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn count_assets_by_folder_returns_correct_totals() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO library_folders (id, name, path, created_at, is_enabled) VALUES (1, 'Test', '/test', '2024-01-01T00:00:00Z', 1)")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at, is_missing) VALUES
+            (1, 1, '/test/a.png', 'a.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 0),
+            (2, 1, '/test/b.png', 'b.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 1),
+            (3, 1, '/test/c.png', 'c.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 1)")
+            .execute(&db).await.unwrap();
+
+        let (total, missing, is_accessible) = count_assets_by_folder(&db, 1, "/nonexistent_path").await.unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(missing, 2);
+        assert_eq!(is_accessible, false);
+
+        let (total, missing, is_accessible) = count_assets_by_folder(&db, 1, ".").await.unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(missing, 2);
+        assert_eq!(is_accessible, true);
+    }
+
+    #[tokio::test]
+    async fn delete_library_folder_cascades_to_related_records() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO library_folders (id, name, path, created_at, is_enabled) VALUES (1, 'Test', '/test', '2024-01-01T00:00:00Z', 1)")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at) VALUES
+            (1, 1, '/test/a.png', 'a.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO tags (id, name, color, created_at, last_used_at) VALUES (1, 'tag1', '#000000', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO asset_tags (asset_id, tag_id) VALUES (1, 1)")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO collections (id, name, description, created_at, updated_at) VALUES (1, 'Col1', '', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO collection_assets (collection_id, asset_id) VALUES (1, 1)")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO scan_jobs (id, library_folder_id, status, started_at) VALUES (1, 1, 'completed', '2024-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+
+        let deleted = delete_library_folder(&db, 1).await.unwrap();
+        assert!(deleted);
+
+        let folder_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM library_folders WHERE id = 1")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(folder_count.0, 0);
+
+        let asset_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM assets WHERE library_folder_id = 1")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(asset_count.0, 0);
+
+        let tag_link_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_tags WHERE asset_id = 1")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(tag_link_count.0, 0);
+
+        let col_link_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM collection_assets WHERE asset_id = 1")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(col_link_count.0, 0);
+
+        let scan_job_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scan_jobs WHERE library_folder_id = 1")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(scan_job_count.0, 0);
     }
 }

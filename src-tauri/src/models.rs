@@ -132,6 +132,14 @@ pub struct ScanSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderAssetCounts {
+    pub folder_id: i64,
+    pub total: i64,
+    pub missing: i64,
+    pub is_accessible: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetSearchRequest {
     pub query: String,
     pub search_file_name: bool,

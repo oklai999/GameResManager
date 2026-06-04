@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Collection, LibraryFolder, ScanJob } from "../types/asset";
+import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob } from "../types/asset";
 
 type Props = {
   folders: LibraryFolder[];
@@ -14,16 +14,28 @@ type Props = {
   onScanFolder: (folderId: number) => void;
   onCancelScan: (jobId: number) => void;
   onDeleteFolder: (folderId: number) => void;
+  onOpenFolder: (folder: LibraryFolder) => void;
   onCreateCollection: (name: string) => void;
   isScanning: boolean;
   latestJobs: Record<number, ScanJob | null>;
+  folderCounts: Record<number, FolderAssetCounts>;
   settingsPanel?: React.ReactNode;
 };
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "未扫描";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("zh-CN");
+  } catch {
+    return iso;
+  }
+}
 
 export function LibrarySidebar({
   folders, collections, activeFilter, selectedFolderId, selectedCollectionId,
   onFilterChange, onSelectFolder, onSelectCollection, onPickFolder, onScanFolder,
-  onCancelScan, onDeleteFolder, onCreateCollection, isScanning, latestJobs, settingsPanel,
+  onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, isScanning, latestJobs, folderCounts, settingsPanel,
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
   const filters = [
@@ -76,6 +88,7 @@ export function LibrarySidebar({
           const job = latestJobs[folder.id];
           const isRunning = job?.status === "running";
           const isSelected = selectedFolderId === folder.id;
+          const counts = folderCounts[folder.id];
           return (
             <div
               className={isSelected ? "folder-row active" : "folder-row"}
@@ -86,38 +99,55 @@ export function LibrarySidebar({
                 onSelectCollection(null);
               }}
             >
-              <span className="folder-name">{folder.name}</span>
-              {isRunning ? (
-                <button
-                  className="scan-btn cancel"
-                  onClick={(e) => { e.stopPropagation(); onCancelScan(job!.id); }}
-                  title="取消"
-                >
-                  取消
-                </button>
-              ) : (
-                <button
-                  className="scan-btn"
-                  onClick={(e) => { e.stopPropagation(); onScanFolder(folder.id); }}
-                  title="扫描"
-                  disabled={isScanning}
-                >
-                  扫描
-                </button>
-              )}
-              <button
-                className="delete-folder-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (window.confirm(`确定要从资源库移除「${folder.name}」的索引吗？这只会删除应用内索引和关联整理数据，不会删除磁盘上的原始文件。`)) {
-                    onDeleteFolder(folder.id);
-                  }
-                }}
-                title="从资源库移除索引"
-                disabled={isRunning}
-              >
-                ✕
-              </button>
+              <div className="folder-row-header">
+                <span className="folder-name">{folder.name}</span>
+                <div className="folder-row-actions">
+                  <button
+                    className="open-folder-btn"
+                    onClick={(e) => { e.stopPropagation(); onOpenFolder(folder); }}
+                    title="打开文件夹"
+                  >
+                    打开
+                  </button>
+                  {isRunning ? (
+                    <button
+                      className="scan-btn cancel"
+                      onClick={(e) => { e.stopPropagation(); onCancelScan(job!.id); }}
+                      title="取消"
+                    >
+                      取消
+                    </button>
+                  ) : (
+                    <button
+                      className="scan-btn"
+                      onClick={(e) => { e.stopPropagation(); onScanFolder(folder.id); }}
+                      title="扫描"
+                      disabled={isScanning}
+                    >
+                      扫描
+                    </button>
+                  )}
+                  <button
+                    className="delete-folder-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`确定要从资源库移除「${folder.name}」的索引吗？这只会删除应用内索引和关联整理数据，不会删除磁盘上的原始文件。`)) {
+                        onDeleteFolder(folder.id);
+                      }
+                    }}
+                    title="从资源库移除索引"
+                    disabled={isRunning}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <div className="folder-row-meta">
+                {counts ? `${counts.total} 个资源` : "0 个资源"}
+                {counts && counts.missing > 0 ? ` · ${counts.missing} 个缺失` : ""}
+                {counts && !counts.is_accessible ? " · 路径不可访问" : ""}
+                {folder.last_scanned_at ? ` · ${formatDateTime(folder.last_scanned_at)}` : " · 未扫描"}
+              </div>
             </div>
           );
         })}

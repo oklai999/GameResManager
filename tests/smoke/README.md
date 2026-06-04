@@ -33,6 +33,26 @@ The app must not delete, move, rename, or modify fixture files during this smoke
 
 ---
 
+## Folder Management + Sticky Details Panel Smoke Test
+
+Use a fixture folder with known assets.
+
+- [ ] Add a fixture folder and run scan.
+- [ ] Confirm the folder row shows resource count, missing count (if any), and last scanned time.
+- [ ] Confirm the folder row shows an "打开" button.
+- [ ] Click "打开" and confirm the source folder opens in File Explorer.
+- [ ] Click "扫描" and confirm scanning starts.
+- [ ] Confirm "取消" button appears during scanning.
+- [ ] Click "取消" and confirm scan stops.
+- [ ] Scroll the center asset grid and confirm the left sidebar and right details panel remain fixed (do not scroll with the grid).
+- [ ] Select an asset with long metadata and confirm the right details panel scrolls internally.
+- [ ] Click "从资源库移除索引" (✕) and confirm a confirmation dialog appears with text stating only the index will be removed, not the source files.
+- [ ] Cancel the removal and confirm the folder and its assets remain visible.
+- [ ] Confirm removal and confirm the folder disappears from the sidebar, but the source folder still exists on disk.
+- [ ] Confirm already-deleted folder's assets no longer appear in searches or filters.
+
+---
+
 ## Thumbnail Display Smoke Test
 
 Use a fixture folder containing both real images and macOS metadata artifacts.

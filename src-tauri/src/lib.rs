@@ -80,7 +80,9 @@ pub fn run() {
             commands::latest_scan_job,
             commands::get_scan_settings,
             commands::save_scan_settings,
-            commands::search_assets
+            commands::search_assets,
+            commands::open_library_folder,
+            commands::get_folder_asset_counts
         ])
         .run(tauri::generate_context!())
         .expect("failed to run app");
