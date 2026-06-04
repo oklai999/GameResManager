@@ -5,6 +5,13 @@ fn escape_like_pattern(input: &str) -> String {
     input.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
+fn exclude_system_metadata_condition() -> String {
+    "file_name != '.DS_Store'
+     AND file_name NOT LIKE '._%' ESCAPE '\\'
+     AND absolute_path NOT LIKE '%/__MACOSX/%' ESCAPE '\\'
+     AND absolute_path NOT LIKE '%\\__MACOSX\\%' ESCAPE '\\'".to_string()
+}
+
 pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow::Result<Vec<Asset>> {
     let mut sql = String::from(
         "SELECT id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
@@ -15,6 +22,7 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
 
     let mut conditions: Vec<String> = Vec::new();
     let mut has_query = false;
+    conditions.push(exclude_system_metadata_condition());
 
     if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
         let mut ors: Vec<String> = Vec::new();
@@ -275,7 +283,8 @@ mod tests {
         sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, note, is_favorite, is_missing, created_at, updated_at) VALUES
             (1, 1, '/test/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', 'main character', 1, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
             (2, 1, '/test/villain.png', 'villain.png', 'png', 'image', '2024-01-01T00:00:00Z', '', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-            (3, 1, '/test/sound.wav', 'sound.wav', 'wav', 'audio', '2024-01-01T00:00:00Z', '', 0, 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+            (3, 1, '/test/sound.wav', 'sound.wav', 'wav', 'audio', '2024-01-01T00:00:00Z', '', 0, 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (4, 1, '/test/__MACOSX/._hero.png', '._hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '', 0, 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
         ).execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO tags (id, name, color, created_at, last_used_at) VALUES (1, 'important', '#FF0000', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
             .execute(&pool).await.unwrap();
@@ -390,5 +399,23 @@ mod tests {
         let results = search_assets(&pool, &req).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].file_name, "hero.png");
+
+        let req = AssetSearchRequest {
+            query: "".to_string(),
+            search_file_name: true,
+            search_note: false,
+            search_path: false,
+            search_tags: false,
+            asset_type: None,
+            library_folder_id: None,
+            collection_id: None,
+            is_favorite: None,
+            is_missing: Some(true),
+            limit: 200,
+            offset: 0,
+        };
+        let results = search_assets(&pool, &req).await.unwrap();
+        assert!(!results.iter().any(|a| a.file_name.starts_with("._")));
+        assert!(!results.iter().any(|a| a.absolute_path.contains("__MACOSX")));
     }
 }

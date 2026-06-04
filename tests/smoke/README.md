@@ -33,6 +33,27 @@ The app must not delete, move, rename, or modify fixture files during this smoke
 
 ---
 
+## Thumbnail Display Smoke Test
+
+Use a fixture folder containing both real images and macOS metadata artifacts.
+
+- [ ] Add a folder that contains:
+  - `real_icon.png` (valid PNG image)
+  - `corrupt.png` (invalid/corrupted image file)
+  - `._fake.png` (macOS AppleDouble metadata file)
+  - `.DS_Store` (macOS folder metadata)
+  - `__MACOSX/._real_icon.png` (macOS resource fork)
+- [ ] Run scan.
+- [ ] Confirm `real_icon.png` shows a thumbnail in the grid (not "无预览").
+- [ ] Confirm `corrupt.png` appears in the grid with status "缩略图失败".
+- [ ] Confirm `._fake.png`, `.DS_Store`, and `__MACOSX/._real_icon.png` do **not** appear in the grid.
+- [ ] Confirm `scan_jobs.skipped_count` accounts for the ignored metadata files.
+- [ ] Select `real_icon.png` and confirm the details panel shows the image preview.
+- [ ] Delete the generated `.webp` thumbnail file from the cache directory while keeping the DB record as `ready`.
+- [ ] Restart the app and confirm the same asset now shows "预览加载失败" (onError fallback).
+- [ ] Run a second scan on the same folder without modifying `real_icon.png`.
+- [ ] Confirm the thumbnail for `real_icon.png` remains visible (unchanged file preserves thumbnail).
+
 ## Large Folder Release Scan
 
 Use `G:\资源\2D游戏资源_淘宝\` or equivalent large local folder (about 62,000+ supported files).

@@ -84,6 +84,10 @@ pub async fn list_assets(db: &Db, limit: i64, offset: i64) -> anyhow::Result<Vec
                 modified_at, width, height, thumbnail_path, thumbnail_status, thumbnail_error, note, is_favorite, is_missing,
                 created_at, updated_at
          FROM assets
+         WHERE file_name != '.DS_Store'
+           AND file_name NOT LIKE '._%'
+           AND absolute_path NOT LIKE '%/__MACOSX/%'
+           AND absolute_path NOT LIKE '%\\__MACOSX\\%'
          ORDER BY file_name
          LIMIT ?1 OFFSET ?2"
     )
@@ -888,5 +892,68 @@ mod scan_job_progress_tests {
             progress_row(&db, completed_id).await,
             (1, 2, 3, 4, 5, Some("old".to_string()))
         );
+    }
+}
+
+#[cfg(test)]
+mod list_assets_filter_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn list_assets_excludes_macos_metadata_files() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at) VALUES
+            (1, 1, '/test/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, 1, '/test/.DS_Store', '.DS_Store', '', 'other', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (3, 1, '/test/__MACOSX/._hero.png', '._hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (4, 1, '/test/._something.jpg', '._something.jpg', 'jpg', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+
+        let assets = list_assets(&db, 100, 0).await.unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].file_name, "hero.png");
+    }
+
+    #[tokio::test]
+    async fn list_assets_excludes_macosx_on_windows_paths() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at) VALUES
+            (1, 1, 'G:/assets/__MACOSX/._icon.png', '._icon.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, 1, 'G:/assets/icon.png', 'icon.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+
+        let assets = list_assets(&db, 100, 0).await.unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].file_name, "icon.png");
     }
 }
