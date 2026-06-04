@@ -10,11 +10,11 @@ pub fn classify_asset(path: &Path) -> AssetType {
 
     match ext.as_str() {
         "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "psd" => AssetType::Image,
-        "mp3" | "wav" | "ogg" | "flac" => AssetType::Audio,
-        "mp4" | "mov" | "webm" | "avi" => AssetType::Video,
+        "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a" => AssetType::Audio,
+        "mp4" | "mov" | "webm" | "avi" | "mkv" => AssetType::Video,
         "ttf" | "otf" | "woff" | "woff2" => AssetType::Font,
-        "gltf" | "glb" | "obj" | "fbx" => AssetType::Model3d,
-        "skel" | "json" | "atlas" => AssetType::Spine,
+        "gltf" | "glb" | "obj" | "fbx" | "usd" | "usdz" => AssetType::Model3d,
+        "skel" | "json" | "atlas" | "spine" => AssetType::Spine,
         _ => AssetType::Other,
     }
 }
@@ -121,11 +121,17 @@ mod tests {
     #[test]
     fn classifies_common_asset_types() {
         assert_eq!(classify_asset(Path::new("icon.PNG")), AssetType::Image);
+        assert_eq!(classify_asset(Path::new("concept.psd")), AssetType::Image);
         assert_eq!(classify_asset(Path::new("music.wav")), AssetType::Audio);
+        assert_eq!(classify_asset(Path::new("voice.aac")), AssetType::Audio);
+        assert_eq!(classify_asset(Path::new("loop.m4a")), AssetType::Audio);
         assert_eq!(classify_asset(Path::new("cutscene.mp4")), AssetType::Video);
+        assert_eq!(classify_asset(Path::new("preview.mkv")), AssetType::Video);
         assert_eq!(classify_asset(Path::new("font.ttf")), AssetType::Font);
         assert_eq!(classify_asset(Path::new("mesh.glb")), AssetType::Model3d);
+        assert_eq!(classify_asset(Path::new("mesh.usdz")), AssetType::Model3d);
         assert_eq!(classify_asset(Path::new("hero.skel")), AssetType::Spine);
+        assert_eq!(classify_asset(Path::new("hero.spine")), AssetType::Spine);
     }
 
     #[test]
