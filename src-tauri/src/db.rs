@@ -197,12 +197,17 @@ pub async fn delete_library_folder(db: &Db, id: i64) -> anyhow::Result<bool> {
 pub async fn count_assets_by_folder(db: &Db, folder_id: i64, path: &str) -> anyhow::Result<(i64, i64, bool)> {
     let row: (i64, i64) = sqlx::query_as(
         "SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_missing = 1 THEN 1 ELSE 0 END), 0)
-         FROM assets WHERE library_folder_id = ?1"
+         FROM assets
+         WHERE library_folder_id = ?1
+           AND file_name != '.DS_Store'
+           AND file_name NOT LIKE '._%' ESCAPE '\\'
+           AND absolute_path NOT LIKE '%/__MACOSX/%' ESCAPE '\\'
+           AND absolute_path NOT LIKE '%\\__MACOSX\\%' ESCAPE '\\'"
     )
     .bind(folder_id)
     .fetch_one(db)
     .await?;
-    let is_accessible = std::path::Path::new(path).exists();
+    let is_accessible = std::path::Path::new(path).is_dir();
     Ok((row.0, row.1, is_accessible))
 }
 
@@ -1087,6 +1092,23 @@ mod folder_management_tests {
         assert_eq!(total, 3);
         assert_eq!(missing, 2);
         assert_eq!(is_accessible, true);
+    }
+
+    #[tokio::test]
+    async fn count_assets_by_folder_excludes_macos_metadata() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO library_folders (id, name, path, created_at, is_enabled) VALUES (1, 'Test', '/test', '2024-01-01T00:00:00Z', 1)")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at, is_missing) VALUES
+            (1, 1, '/test/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 0),
+            (2, 1, '/test/.DS_Store', '.DS_Store', '', 'other', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 0),
+            (3, 1, '/test/._hero.png', '._hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 0),
+            (4, 1, '/test/__MACOSX/._icon.png', '._icon.png', 'png', 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', 0)")
+            .execute(&db).await.unwrap();
+
+        let (total, missing, _) = count_assets_by_folder(&db, 1, "/test").await.unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(missing, 0);
     }
 
     #[tokio::test]
