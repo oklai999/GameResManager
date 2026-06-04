@@ -29,6 +29,10 @@ const asset: Asset = {
   updated_at: "2026-05-27T00:00:00Z",
 };
 
+function makeAsset(overrides: Partial<Asset>): Asset {
+  return { ...asset, ...overrides };
+}
+
 describe("AssetGrid", () => {
   it("calls selection change when an asset is clicked", async () => {
     const onSelectionChange = vi.fn();
@@ -52,7 +56,7 @@ describe("AssetGrid", () => {
     expect(screen.getByText("缩略图失败")).toBeInTheDocument();
   });
 
-  it("shows no preview for image assets without a thumbnail", () => {
+  it("shows image placeholder for image assets without a thumbnail", () => {
     render(
       <AssetGrid
         assets={[asset]}
@@ -62,7 +66,23 @@ describe("AssetGrid", () => {
       />
     );
 
-    expect(screen.getByText("无预览")).toBeInTheDocument();
+    expect(screen.getByText("图片")).toBeInTheDocument();
+  });
+
+  it("shows asset type and tag chips for visual scanning", () => {
+    render(
+      <AssetGrid
+        assets={[{ ...asset, tags: ["场景", "森林", "日照"] }]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("PNG")).toBeInTheDocument();
+    expect(screen.getByText("场景")).toBeInTheDocument();
+    expect(screen.getByText("森林")).toBeInTheDocument();
+    expect(screen.getByText("+1")).toBeInTheDocument();
   });
 
   it("shows preview load failure after a ready thumbnail image errors", () => {
@@ -80,5 +100,26 @@ describe("AssetGrid", () => {
     fireEvent.error(img as HTMLImageElement);
 
     expect(screen.getByText("预览加载失败")).toBeInTheDocument();
+  });
+
+  it("shows manageable placeholders for non-previewable asset types", () => {
+    const { container } = render(
+      <AssetGrid
+        assets={[
+          makeAsset({ id: 1, file_name: "concept.psd", extension: "psd", asset_type: "image", thumbnail_status: "none" }),
+          makeAsset({ id: 2, file_name: "hero.spine", extension: "spine", asset_type: "spine", thumbnail_status: "none" }),
+          makeAsset({ id: 3, file_name: "mesh.glb", extension: "glb", asset_type: "model3d", thumbnail_status: "none" }),
+        ]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const placeholders = screen.getAllByTestId("asset-placeholder");
+    const texts = placeholders.map((el) => el.textContent);
+    expect(texts).toContain("PSD");
+    expect(texts).toContain("Spine");
+    expect(texts).toContain("3D");
   });
 });
