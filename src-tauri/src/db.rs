@@ -682,6 +682,39 @@ pub async fn update_asset_note(db: &Db, asset_id: i64, note: &str) -> anyhow::Re
     Ok(row)
 }
 
+pub async fn record_recent_asset_action(
+    db: &Db,
+    asset_id: i64,
+    action_type: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO recent_asset_actions (asset_id, action_type, created_at) VALUES (?1, ?2, ?3)",
+    )
+    .bind(asset_id)
+    .bind(action_type)
+    .bind(&now)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn list_recent_asset_actions(
+    db: &Db,
+    limit: i64,
+) -> anyhow::Result<Vec<crate::models::RecentAssetAction>> {
+    sqlx::query_as::<_, crate::models::RecentAssetAction>(
+        "SELECT id, asset_id, action_type, created_at
+         FROM recent_asset_actions
+         ORDER BY created_at DESC
+         LIMIT ?1",
+    )
+    .bind(limit)
+    .fetch_all(db)
+    .await
+    .map_err(Into::into)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1152,5 +1185,83 @@ mod folder_management_tests {
         let scan_job_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scan_jobs WHERE library_folder_id = 1")
             .fetch_one(&db).await.unwrap();
         assert_eq!(scan_job_count.0, 0);
+    }
+}
+
+#[cfg(test)]
+mod recent_action_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE library_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_scanned_at TEXT,
+                is_enabled INTEGER NOT NULL DEFAULT 1
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (library_folder_id) REFERENCES library_folders(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE recent_asset_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn records_recent_asset_action() {
+        let db = setup_db().await;
+        let folder = create_library_folder(&db, "fixture", "C:/assets").await.unwrap();
+        sqlx::query("INSERT INTO assets (library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
+            .bind(folder.id)
+            .bind("C:/assets/icon.png")
+            .bind("icon.png")
+            .bind("png")
+            .bind("image")
+            .bind("2024-01-01T00:00:00Z")
+            .bind("2024-01-01T00:00:00Z")
+            .bind("2024-01-01T00:00:00Z")
+            .execute(&db).await.unwrap();
+        let asset_id = sqlx::query_as::<_, (i64,)>("SELECT id FROM assets WHERE absolute_path = ?1")
+            .bind("C:/assets/icon.png")
+            .fetch_one(&db).await.unwrap().0;
+
+        record_recent_asset_action(&db, asset_id, "copy_path").await.unwrap();
+        let actions = list_recent_asset_actions(&db, 10).await.unwrap();
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].asset_id, asset_id);
+        assert_eq!(actions[0].action_type, "copy_path");
     }
 }

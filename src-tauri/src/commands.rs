@@ -322,6 +322,36 @@ pub async fn get_folder_asset_counts(
 }
 
 #[tauri::command]
+pub async fn record_recent_asset_action(
+    db: State<'_, SqlitePool>,
+    asset_id: i64,
+    action_type: String,
+) -> Result<(), CommandError> {
+    match action_type.as_str() {
+        "open_file" | "reveal_folder" | "copy_path" => {}
+        _ => {
+            return Err(CommandError {
+                message: "unsupported recent action type".to_string(),
+            })
+        }
+    }
+
+    db::record_recent_asset_action(&*db, asset_id, &action_type)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn list_recent_asset_actions(
+    db: State<'_, SqlitePool>,
+    limit: i64,
+) -> Result<Vec<crate::models::RecentAssetAction>, CommandError> {
+    db::list_recent_asset_actions(&*db, limit)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn create_library_folder_from_path(
     db: State<'_, SqlitePool>,
     path: String,
