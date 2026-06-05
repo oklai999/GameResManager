@@ -133,3 +133,15 @@ Use a fixture folder with the newly covered formats.
 - Click `最近使用` in the sidebar and confirm those assets appear.
 - Restart the app and confirm recent activity is loaded from local app data.
 - Confirm these actions do not delete, move, rename, or modify source files.
+
+## Tag Efficiency Smoke Test
+
+- Select one asset and add tag `地形`.
+- Select another asset and confirm `地形` appears as a suggested tag.
+- Type `地` in the tag input and confirm suggestions narrow to matching tags.
+- Click suggested tag `地形` and confirm it is applied.
+- Select two assets and confirm the batch panel shows only common tags as chips.
+- Add tag `批量整理` to the batch selection and confirm both selected assets receive it after refresh.
+- Confirm already-applied tags are not suggested again for the current selection.
+- Restart the app and confirm recently used tags still appear as suggestions.
+- Confirm no source file is deleted, moved, renamed, or modified.
