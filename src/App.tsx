@@ -395,6 +395,15 @@ function AppInner() {
     }
   }, [showToast]);
 
+  const handleCopyText = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("已复制", "success");
+    } catch (e) {
+      showToast((e as any)?.message ?? "复制失败", "error");
+    }
+  }, [showToast]);
+
   const isEmptySearch = displayAssets.length === 0;
   const hasFolders = folders.length > 0;
   const hasScanned = hasFolders && assets.length > 0;
@@ -464,6 +473,7 @@ function AppInner() {
         onAddToCollection={handleAddToCollection}
         onUpdateNote={handleUpdateNote}
         recentTags={recentTags}
+        onCopyText={handleCopyText}
       />
     </main>
   );

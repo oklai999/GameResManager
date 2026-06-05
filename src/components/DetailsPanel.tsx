@@ -17,6 +17,7 @@ type Props = {
   onAddToCollection: (collectionId: number, assetIds: number[]) => void;
   onUpdateNote?: (asset: Asset) => void;
   recentTags?: string[];
+  onCopyText?: (text: string) => void;
 };
 
 function formatFileSize(bytes: number): string {
@@ -34,6 +35,11 @@ function formatDateTime(iso: string): string {
   }
 }
 
+function getFolderPath(absolutePath: string): string {
+  const lastSep = Math.max(absolutePath.lastIndexOf("\\"), absolutePath.lastIndexOf("/"));
+  return lastSep > 0 ? absolutePath.substring(0, lastSep) : "";
+}
+
 export function DetailsPanel({
   selectedAssets,
   collections,
@@ -45,6 +51,7 @@ export function DetailsPanel({
   onAddToCollection,
   onUpdateNote,
   recentTags = [],
+  onCopyText,
 }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
@@ -173,6 +180,14 @@ export function DetailsPanel({
             <span>修改时间</span><strong>{formatDateTime(asset.modified_at)}</strong>
           </div>
           <div className="detail-row path">{asset.absolute_path}</div>
+          {onCopyText && (
+            <div className="path-variant-actions">
+              <button onClick={() => onCopyText(asset.absolute_path)}>复制绝对路径</button>
+              <button onClick={() => onCopyText(asset.absolute_path.replace(/\\/g, "/"))}>复制正斜杠路径</button>
+              <button onClick={() => onCopyText(getFolderPath(asset.absolute_path))}>复制文件夹路径</button>
+              <button onClick={() => onCopyText(asset.file_name)}>复制文件名</button>
+            </div>
+          )}
           {asset.thumbnail_status === "failed" && asset.thumbnail_error && (
             <div className="detail-row error-text">缩略图错误：{asset.thumbnail_error}</div>
           )}

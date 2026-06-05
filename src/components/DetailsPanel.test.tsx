@@ -210,6 +210,67 @@ describe("DetailsPanel", () => {
     expect(onCopyPath).toHaveBeenCalledWith(asset);
   });
 
+  it("shows path variant copy buttons for single asset", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole("button", { name: "复制绝对路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制正斜杠路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制文件夹路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制文件名" })).toBeInTheDocument();
+  });
+
+  it("calls onCopyText with file name when copy file name button is clicked", async () => {
+    const onCopyText = vi.fn();
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={onCopyText}
+      />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "复制文件名" }));
+    expect(onCopyText).toHaveBeenCalledWith("1.png");
+  });
+
+  it("does not show path variant buttons in batch mode", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1), makeAsset(2)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("已选择 2 个资源")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制绝对路径" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制文件名" })).not.toBeInTheDocument();
+  });
+
   it("renders note textarea and calls onUpdateNote after saving", async () => {
     const { updateAssetNote } = await import("../api/tauri");
     const onUpdateNote = vi.fn();
