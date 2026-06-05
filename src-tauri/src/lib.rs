@@ -66,6 +66,7 @@ pub fn run() {
             commands::delete_library_folder,
             commands::list_asset_tags,
             commands::list_tags,
+            commands::list_recent_tags,
             commands::get_asset_tags,
             commands::list_common_tags,
             commands::list_collections,

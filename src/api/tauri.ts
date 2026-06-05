@@ -29,6 +29,10 @@ export async function listTags(): Promise<Tag[]> {
   return invoke<Tag[]>("list_tags");
 }
 
+export async function listRecentTags(limit: number): Promise<Tag[]> {
+  return invoke<Tag[]>("list_recent_tags", { limit });
+}
+
 export async function getAssetTags(assetId: number): Promise<string[]> {
   return invoke<string[]>("get_asset_tags", { assetId });
 }

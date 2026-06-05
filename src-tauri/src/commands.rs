@@ -90,6 +90,14 @@ pub async fn list_tags(
 }
 
 #[tauri::command]
+pub async fn list_recent_tags(
+    db: State<'_, SqlitePool>,
+    limit: i64,
+) -> Result<Vec<crate::models::Tag>, CommandError> {
+    db::list_recent_tags(&*db, limit).await.map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn get_asset_tags(
     db: State<'_, SqlitePool>,
     asset_id: i64,

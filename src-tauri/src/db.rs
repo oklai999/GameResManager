@@ -238,6 +238,20 @@ pub async fn list_tags(db: &Db) -> anyhow::Result<Vec<crate::models::Tag>> {
     Ok(rows)
 }
 
+pub async fn list_recent_tags(db: &Db, limit: i64) -> anyhow::Result<Vec<crate::models::Tag>> {
+    let limit = limit.clamp(0, 50);
+    sqlx::query_as::<_, crate::models::Tag>(
+        "SELECT id, name, color
+         FROM tags
+         ORDER BY last_used_at DESC, name ASC
+         LIMIT ?1",
+    )
+    .bind(limit)
+    .fetch_all(db)
+    .await
+    .map_err(Into::into)
+}
+
 pub async fn list_asset_tags(db: &Db, asset_id: i64) -> anyhow::Result<Vec<String>> {
     let rows = sqlx::query_as::<_, (String,)>(
         "SELECT t.name FROM asset_tags at JOIN tags t ON at.tag_id = t.id WHERE at.asset_id = ?1 ORDER BY t.name"
@@ -1263,5 +1277,54 @@ mod recent_action_tests {
         assert_eq!(actions.len(), 1);
         assert_eq!(actions[0].asset_id, asset_id);
         assert_eq!(actions[0].action_type, "copy_path");
+    }
+}
+
+#[cfg(test)]
+mod recent_tag_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn lists_recent_tags_by_last_used_then_name() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO tags (name, color, created_at, last_used_at) VALUES ('角色', '#5B8DEF', '2026-01-01T00:00:00Z', '2026-01-03T00:00:00Z')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO tags (name, color, created_at, last_used_at) VALUES ('地形', '#5B8DEF', '2026-01-01T00:00:00Z', '2026-01-04T00:00:00Z')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO tags (name, color, created_at, last_used_at) VALUES ('特效', '#5B8DEF', '2026-01-01T00:00:00Z', '2026-01-03T00:00:00Z')")
+            .execute(&db).await.unwrap();
+
+        let tags = list_recent_tags(&db, 3).await.unwrap();
+
+        let names: Vec<String> = tags.into_iter().map(|tag| tag.name).collect();
+        assert_eq!(names, vec!["地形", "特效", "角色"]);
+    }
+
+    #[tokio::test]
+    async fn clamps_recent_tag_limit() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO tags (name, color, created_at, last_used_at) VALUES ('地形', '#5B8DEF', '2026-01-01T00:00:00Z', '2026-01-04T00:00:00Z')")
+            .execute(&db).await.unwrap();
+
+        let tags = list_recent_tags(&db, -5).await.unwrap();
+
+        assert!(tags.is_empty());
     }
 }
