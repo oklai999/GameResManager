@@ -145,3 +145,20 @@ Use a fixture folder with the newly covered formats.
 - Confirm already-applied tags are not suggested again for the current selection.
 - Restart the app and confirm recently used tags still appear as suggestions.
 - Confirm no source file is deleted, moved, renamed, or modified.
+
+---
+
+## Path Friendly Display Smoke Test
+
+- Select one asset and confirm the absolute path remains visible in the details panel.
+- Click `复制路径` and confirm the clipboard contains the absolute path.
+- Click `复制正斜杠路径` and confirm backslashes are converted to `/`.
+- Click `复制文件夹路径` and confirm the clipboard contains the parent folder path.
+- Click `复制文件名` and confirm the clipboard contains only the file name.
+- Set an explicit project root that contains the selected asset.
+- Confirm the details panel shows a valid `res://...` path.
+- Copy the `res://...` path and confirm the clipboard value.
+- Set or choose a project root that does not contain the selected asset.
+- Confirm the app does not generate an invalid `res://...` path.
+- Confirm `打开文件` and `打开所在目录` still work.
+- Confirm no source file is deleted, moved, renamed, or modified.
