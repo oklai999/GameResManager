@@ -3,10 +3,11 @@ import { listTags } from "../api/tauri";
 
 type Props = {
   existingTags: string[];
+  recentTags?: string[];
   onApply: (tagName: string) => void;
 };
 
-export function TagEditor({ existingTags, onApply }: Props) {
+export function TagEditor({ existingTags, recentTags = [], onApply }: Props) {
   const [input, setInput] = useState("");
   const [allTags, setAllTags] = useState<string[]>([]);
 
@@ -25,11 +26,17 @@ export function TagEditor({ existingTags, onApply }: Props) {
     }
   };
 
-  const suggestions = allTags.filter(
-    (t) =>
-      t.toLowerCase().includes(input.trim().toLowerCase()) &&
-      !existingTags.includes(t)
-  );
+  const normalizedInput = input.trim().toLowerCase();
+  const existingSet = new Set(existingTags.map((tag) => tag.toLowerCase()));
+  const suggestions = [...new Set([...recentTags, ...allTags])]
+    .filter((tag) => !existingSet.has(tag.toLowerCase()))
+    .filter((tag) => normalizedInput.length === 0 || tag.toLowerCase().includes(normalizedInput))
+    .slice(0, 8);
+
+  function applySuggestion(tag: string) {
+    onApply(tag);
+    setInput("");
+  }
 
   return (
     <div className="tag-editor">
@@ -52,12 +59,12 @@ export function TagEditor({ existingTags, onApply }: Props) {
       </form>
       {suggestions.length > 0 && (
         <div className="tag-suggestions">
-          {suggestions.slice(0, 8).map((tag) => (
+          {suggestions.map((tag) => (
             <button
               key={tag}
               type="button"
               className="tag-suggestion"
-              onClick={() => onApply(tag)}
+              onClick={() => applySuggestion(tag)}
             >
               {tag}
             </button>
