@@ -221,7 +221,9 @@ function AppInner() {
   }, [executeSearch]);
 
   const displayAssets = activeFilter === "recent"
-    ? gridAssets.filter((asset) => recentAssetIds.includes(asset.id))
+    ? recentAssetIds
+        .map((id) => gridAssets.find((a) => a.id === id))
+        .filter(Boolean) as Asset[]
     : gridAssets;
 
   const selectedAssets = selectedIds
@@ -387,89 +389,68 @@ function AppInner() {
 
   return (
     <main className="app-shell">
-      <header className="app-topbar">
-        <div className="app-brand">
-          <div className="app-mark" aria-hidden="true">GR</div>
-          <div>
-            <div className="app-title">游戏资源管理器</div>
-            <div className="app-subtitle">本地素材索引 · 不接管原文件结构</div>
+      <LibrarySidebar
+        folders={folders}
+        collections={collections}
+        activeFilter={activeFilter}
+        selectedFolderId={selectedFolderId}
+        selectedCollectionId={selectedCollectionId}
+        onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
+        onSelectFolder={(id) => { setSelectedFolderId(id); setSelectedCollectionId(null); setSelectedIds([]); }}
+        onSelectCollection={(id) => { setSelectedCollectionId(id); setSelectedFolderId(null); setSelectedIds([]); }}
+        onPickFolder={handlePickFolder}
+        onScanFolder={handleScanFolder}
+        onCancelScan={handleCancelScan}
+        onDeleteFolder={handleDeleteFolder}
+        onOpenFolder={handleOpenFolder}
+        onCreateCollection={handleCreateCollection}
+        isScanning={isScanning}
+        latestJobs={latestJobs}
+        folderCounts={folderCounts}
+        settingsPanel={
+          scanSettings ? (
+            <SettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
+          ) : null
+        }
+      />
+      <section className="workspace">
+        <SearchToolbar query={query} scope={scope} onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }} onScopeChange={(s) => { setScope(s); setSelectedIds([]); }} />
+        {scanMessage && (
+          <div className="scan-summary" onClick={() => setScanMessage(null)}>
+            {scanMessage}
           </div>
-        </div>
-        <div className="app-topbar-stats" aria-label="资源统计">
-          <span className="app-build-marker">新版界面 0.2.1</span>
-          <span>{folders.length} 个资源库</span>
-          <span>{assets.length} 个资源</span>
-          <span>{selectedIds.length} 个已选</span>
-        </div>
-      </header>
-      <div className="workbench-shell">
-        <LibrarySidebar
-          folders={folders}
-          collections={collections}
-          activeFilter={activeFilter}
-          selectedFolderId={selectedFolderId}
-          selectedCollectionId={selectedCollectionId}
-          onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
-          onSelectFolder={(id) => { setSelectedFolderId(id); setSelectedCollectionId(null); setSelectedIds([]); }}
-          onSelectCollection={(id) => { setSelectedCollectionId(id); setSelectedFolderId(null); setSelectedIds([]); }}
-          onPickFolder={handlePickFolder}
-          onScanFolder={handleScanFolder}
-          onCancelScan={handleCancelScan}
-          onDeleteFolder={handleDeleteFolder}
-          onOpenFolder={handleOpenFolder}
-          onCreateCollection={handleCreateCollection}
-          isScanning={isScanning}
-          latestJobs={latestJobs}
-          folderCounts={folderCounts}
-          settingsPanel={
-            scanSettings ? (
-              <SettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
-            ) : null
-          }
-        />
-        <section className="workspace">
-          <SearchToolbar query={query} scope={scope} onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }} onScopeChange={(s) => { setScope(s); setSelectedIds([]); }} />
-          <div className="workspace-meta">
-            <span>{displayAssets.length} 个结果</span>
-            <span>网格视图</span>
-          </div>
-          {scanMessage && (
-            <div className="scan-summary" onClick={() => setScanMessage(null)}>
-              {scanMessage}
-            </div>
-          )}
-          {Object.values(latestJobs)
-            .filter(Boolean)
-            .map((job) => (
-              <ScanStatusBar key={job!.id} job={job!} />
-            ))}
-          {!hasFolders ? (
-            <EmptyState variant="no-folders" />
-          ) : isEmptySearch && hasScanned ? (
-            <EmptyState variant="no-results" />
-          ) : !hasScanned ? (
-            <EmptyState variant="no-assets" />
-          ) : (
-            <AssetGrid
-              assets={displayAssets}
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
-              onToggleFavorite={handleToggleFavorite}
-            />
-          )}
-        </section>
-        <DetailsPanel
-          selectedAssets={selectedAssets}
-          collections={collections}
-          onOpenFile={handleOpenFile}
-          onReveal={handleRevealFile}
-          onCopyPath={handleCopyPath}
-          onApplyTag={handleApplyTag}
-          onToggleFavorite={handleToggleFavorite}
-          onAddToCollection={handleAddToCollection}
-          onUpdateNote={handleUpdateNote}
-        />
-      </div>
+        )}
+        {Object.values(latestJobs)
+          .filter(Boolean)
+          .map((job) => (
+            <ScanStatusBar key={job!.id} job={job!} />
+          ))}
+        {!hasFolders ? (
+          <EmptyState variant="no-folders" />
+        ) : isEmptySearch && hasScanned ? (
+          <EmptyState variant="no-results" />
+        ) : !hasScanned ? (
+          <EmptyState variant="no-assets" />
+        ) : (
+          <AssetGrid
+            assets={displayAssets}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onToggleFavorite={handleToggleFavorite}
+          />
+        )}
+      </section>
+      <DetailsPanel
+        selectedAssets={selectedAssets}
+        collections={collections}
+        onOpenFile={handleOpenFile}
+        onReveal={handleRevealFile}
+        onCopyPath={handleCopyPath}
+        onApplyTag={handleApplyTag}
+        onToggleFavorite={handleToggleFavorite}
+        onAddToCollection={handleAddToCollection}
+        onUpdateNote={handleUpdateNote}
+      />
     </main>
   );
 }
