@@ -1,5 +1,7 @@
+import { AlertTriangle, FolderPlus, Search, SearchX } from "lucide-react";
+
 type Props = {
-  variant: "no-folders" | "no-assets" | "no-results" | "file-missing";
+  variant: "no-folders" | "no-assets" | "no-results" | "no-selection" | "file-missing";
 };
 
 const content: Record<Props["variant"], { title: string; description: string }> = {
@@ -15,6 +17,10 @@ const content: Record<Props["variant"], { title: string; description: string }> 
     title: "没有找到匹配的资源",
     description: "尝试修改搜索关键词或筛选条件。",
   },
+  "no-selection": {
+    title: "选择资源查看详情",
+    description: "点击资源卡片以查看详细信息和可用操作。",
+  },
   "file-missing": {
     title: "文件已缺失",
     description: "该资源文件在磁盘上已不存在。",
@@ -23,13 +29,18 @@ const content: Record<Props["variant"], { title: string; description: string }> 
 
 export function EmptyState({ variant }: Props) {
   const { title, description } = content[variant];
+  const Icon =
+    variant === "no-folders"
+      ? FolderPlus
+      : variant === "no-assets"
+        ? Search
+        : variant === "file-missing"
+          ? AlertTriangle
+          : Search;
   return (
     <div className="empty-state">
       <div className="empty-state-icon">
-        {variant === "no-folders" && "📁"}
-        {variant === "no-assets" && "🔍"}
-        {variant === "no-results" && "🔎"}
-        {variant === "file-missing" && "⚠️"}
+        <Icon size={34} aria-hidden="true" />
       </div>
       <div className="empty-state-title">{title}</div>
       <div className="empty-state-desc">{description}</div>

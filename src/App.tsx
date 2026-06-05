@@ -303,11 +303,10 @@ function AppInner() {
     try {
       await applyTagToAssets(tagName, assetIds);
       await loadData();
-      await loadRecentTags();
     } catch (e) {
       showError(e);
     }
-  }, [loadData, loadRecentTags, showError]);
+  }, [loadData, showError]);
 
   const handleCreateCollection = useCallback(async (name: string) => {
     try {

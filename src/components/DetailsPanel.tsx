@@ -97,7 +97,7 @@ export function DetailsPanel({
     return (
       <aside className="details-panel inspector-empty">
         <div className="panel-heading">详情</div>
-        <EmptyState variant="no-results" />
+        <EmptyState variant="no-selection" />
       </aside>
     );
   }
