@@ -14,6 +14,7 @@ import {
   listCollections,
   listLibraryFolders,
   listRecentAssetActions,
+  listRecentTags,
   openAssetFile,
   openLibraryFolder,
   pickLibraryFolder,
@@ -66,11 +67,21 @@ function AppInner() {
   const [gridAssets, setGridAssets] = useState<Asset[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
   const [recentAssetIds, setRecentAssetIds] = useState<number[]>([]);
+  const [recentTags, setRecentTags] = useState<string[]>([]);
   const searchVersionRef = useRef(0);
 
   const showError = useCallback((e: unknown) => {
     showToast((e as any)?.message ?? String(e), "error");
   }, [showToast]);
+
+  const loadRecentTags = useCallback(async () => {
+    try {
+      const tags = await listRecentTags(12);
+      setRecentTags(tags.map((tag) => tag.name));
+    } catch {
+      setRecentTags([]);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -114,10 +125,12 @@ function AppInner() {
         })
       );
       setFolderCounts(counts);
+
+      await loadRecentTags();
     } catch (e) {
       showError(e);
     }
-  }, [showError]);
+  }, [showError, loadRecentTags]);
 
   const refreshScanJobs = useCallback(async () => {
     try {
@@ -290,10 +303,11 @@ function AppInner() {
     try {
       await applyTagToAssets(tagName, assetIds);
       await loadData();
+      await loadRecentTags();
     } catch (e) {
       showError(e);
     }
-  }, [loadData, showError]);
+  }, [loadData, loadRecentTags, showError]);
 
   const handleCreateCollection = useCallback(async (name: string) => {
     try {
@@ -450,6 +464,7 @@ function AppInner() {
         onToggleFavorite={handleToggleFavorite}
         onAddToCollection={handleAddToCollection}
         onUpdateNote={handleUpdateNote}
+        recentTags={recentTags}
       />
     </main>
   );

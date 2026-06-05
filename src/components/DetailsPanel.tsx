@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { Copy, ExternalLink, FolderOpen, Star } from "lucide-react";
 import type { Asset, Collection } from "../types/asset";
 import { getAssetTags, listCommonTags, updateAssetNote } from "../api/tauri";
 import { EmptyState } from "./EmptyState";
@@ -14,6 +16,7 @@ type Props = {
   onToggleFavorite: (asset: Asset) => void;
   onAddToCollection: (collectionId: number, assetIds: number[]) => void;
   onUpdateNote?: (asset: Asset) => void;
+  recentTags?: string[];
 };
 
 function formatFileSize(bytes: number): string {
@@ -41,6 +44,7 @@ export function DetailsPanel({
   onToggleFavorite,
   onAddToCollection,
   onUpdateNote,
+  recentTags = [],
 }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
@@ -90,7 +94,12 @@ export function DetailsPanel({
   }, [selectedAssets, note, onUpdateNote, noteSaving]);
 
   if (selectedAssets.length === 0) {
-    return <aside className="details-panel muted">选择资源查看详情</aside>;
+    return (
+      <aside className="details-panel inspector-empty">
+        <div className="panel-heading">详情</div>
+        <EmptyState variant="no-results" />
+      </aside>
+    );
   }
 
   const ids = selectedAssets.map((asset) => asset.id);
@@ -98,12 +107,20 @@ export function DetailsPanel({
   if (selectedAssets.length > 1) {
     return (
       <aside className="details-panel">
-        <div className="panel-heading">已选择 {selectedAssets.length} 个资源</div>
-        <div className="detail-row">共同标签：{tags.length > 0 ? tags.join(", ") : "无"}</div>
-        <TagEditor existingTags={tags} onApply={(tagName) => onApplyTag(tagName, ids)} />
+        <div className="inspector-head">
+          <div>
+            <div className="panel-heading">批量整理</div>
+            <div className="muted">已选择 {selectedAssets.length} 个资源</div>
+          </div>
+        </div>
+        <section className="inspector-section">
+          <div className="section-title">共同标签</div>
+          <div className="detail-row">{tags.length > 0 ? tags.join(", ") : "无"}</div>
+          <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, ids)} />
+        </section>
         {collections.length > 0 && (
-          <div className="detail-actions">
-            <div className="panel-heading secondary">添加到集合</div>
+          <section className="inspector-section">
+            <div className="section-title">添加到集合</div>
             <div className="collection-list">
               {collections.map((col) => (
                 <button key={col.id} className="collection-btn" onClick={() => onAddToCollection(col.id, ids)}>
@@ -111,27 +128,50 @@ export function DetailsPanel({
                 </button>
               ))}
             </div>
-          </div>
+          </section>
         )}
       </aside>
     );
   }
 
   const asset = selectedAssets[0];
+  const canPreview =
+    !asset.is_missing &&
+    asset.thumbnail_status === "ready" &&
+    typeof asset.thumbnail_path === "string" &&
+    asset.thumbnail_path.length > 0;
 
   return (
     <aside className="details-panel">
-      <div className="panel-heading">{asset.file_name}</div>
+      <div className="inspector-head">
+        <div>
+          <div className="panel-heading">{asset.file_name}</div>
+          <div className="muted">{asset.extension.toUpperCase()} · {formatFileSize(asset.file_size)}</div>
+        </div>
+        <button className={asset.is_favorite ? "icon-action active" : "icon-action"} onClick={() => onToggleFavorite(asset)} title={asset.is_favorite ? "取消收藏" : "收藏"}>
+          <Star size={17} fill={asset.is_favorite ? "currentColor" : "none"} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="detail-preview">
+        {canPreview ? (
+          <img src={convertFileSrc(asset.thumbnail_path!)} alt="" />
+        ) : (
+          <span>{asset.is_missing ? "文件缺失" : asset.asset_type}</span>
+        )}
+      </div>
       {asset.is_missing ? (
         <EmptyState variant="file-missing" />
       ) : (
-        <>
-          <div className="detail-row">类型：{asset.asset_type}</div>
-          <div className="detail-row">大小：{formatFileSize(asset.file_size)}</div>
+        <section className="inspector-section">
+          <div className="section-title">属性</div>
+          <div className="detail-grid">
+            <span>类型</span><strong>{asset.asset_type}</strong>
+            <span>大小</span><strong>{formatFileSize(asset.file_size)}</strong>
           {asset.width && asset.height && (
-            <div className="detail-row">尺寸：{asset.width} x {asset.height}</div>
+              <><span>尺寸</span><strong>{asset.width} x {asset.height}</strong></>
           )}
-          <div className="detail-row">修改时间：{formatDateTime(asset.modified_at)}</div>
+            <span>修改时间</span><strong>{formatDateTime(asset.modified_at)}</strong>
+          </div>
           <div className="detail-row path">{asset.absolute_path}</div>
           {asset.thumbnail_status === "failed" && asset.thumbnail_error && (
             <div className="detail-row error-text">缩略图错误：{asset.thumbnail_error}</div>
@@ -139,31 +179,36 @@ export function DetailsPanel({
           {asset.thumbnail_status === "ready" && asset.thumbnail_path && (
             <div className="detail-row path">缩略图缓存：{asset.thumbnail_path}</div>
           )}
-        </>
+        </section>
       )}
 
-      <div className="panel-heading secondary">备注</div>
-      <textarea
-        className="note-textarea"
-        rows={4}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        onBlur={saveNote}
-        placeholder="输入备注..."
-        disabled={noteSaving}
-      />
-      <div className="note-actions">
-        <button className="note-save-btn" onClick={saveNote} disabled={noteSaving}>
-          {noteSaving ? "保存中..." : "保存备注"}
-        </button>
-        {noteError && <span className="error-text">{noteError}</span>}
-      </div>
+      <section className="inspector-section">
+        <div className="section-title">备注</div>
+        <textarea
+          className="note-textarea"
+          rows={4}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onBlur={saveNote}
+          placeholder="输入备注..."
+          disabled={noteSaving}
+        />
+        <div className="note-actions">
+          <button className="note-save-btn" onClick={saveNote} disabled={noteSaving}>
+            {noteSaving ? "保存中..." : "保存备注"}
+          </button>
+          {noteError && <span className="error-text">{noteError}</span>}
+        </div>
+      </section>
 
-      <TagEditor existingTags={tags} onApply={(tagName) => onApplyTag(tagName, [asset.id])} />
+      <section className="inspector-section">
+        <div className="section-title">标签</div>
+        <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, [asset.id])} />
+      </section>
 
       {collections.length > 0 && (
-        <div className="detail-actions">
-          <div className="panel-heading secondary">添加到集合</div>
+        <section className="inspector-section">
+          <div className="section-title">添加到集合</div>
           <div className="collection-list">
             {collections.map((col) => (
               <button key={col.id} className="collection-btn" onClick={() => onAddToCollection(col.id, [asset.id])}>
@@ -171,17 +216,14 @@ export function DetailsPanel({
               </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="detail-actions">
-        <button onClick={() => onToggleFavorite(asset)}>
-          {asset.is_favorite ? "取消收藏" : "收藏"}
-        </button>
-        <button onClick={() => onOpenFile(asset)}>打开文件</button>
-        <button onClick={() => onReveal(asset)}>打开所在目录</button>
-        <button onClick={() => onCopyPath(asset)}>复制路径</button>
-      </div>
+      <section className="detail-actions inspector-section">
+        <button onClick={() => onOpenFile(asset)}><ExternalLink size={15} aria-hidden="true" />打开文件</button>
+        <button onClick={() => onReveal(asset)}><FolderOpen size={15} aria-hidden="true" />打开所在目录</button>
+        <button onClick={() => onCopyPath(asset)}><Copy size={15} aria-hidden="true" />复制路径</button>
+      </section>
     </aside>
   );
 }

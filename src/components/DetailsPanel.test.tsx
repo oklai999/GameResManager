@@ -11,6 +11,10 @@ vi.mock("../api/tauri", () => ({
   updateAssetNote: vi.fn().mockResolvedValue({}),
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: (path: string) => path,
+}));
+
 function makeAsset(id: number): Asset {
   return {
     id,
