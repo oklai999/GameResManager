@@ -1,4 +1,19 @@
 import { useState } from "react";
+import {
+  AlertTriangle,
+  Box,
+  FileImage,
+  Film,
+  Folder,
+  FolderOpen,
+  Heart,
+  List,
+  Music,
+  Plus,
+  RotateCw,
+  Trash2,
+  Type,
+} from "lucide-react";
 import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob } from "../types/asset";
 
 type Props = {
@@ -39,15 +54,16 @@ export function LibrarySidebar({
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
   const filters = [
-    { id: "all", label: "全部资源" },
-    { id: "favorites", label: "收藏" },
-    { id: "missing", label: "缺失文件" },
-    { id: "image", label: "图片" },
-    { id: "audio", label: "音频" },
-    { id: "video", label: "视频" },
-    { id: "font", label: "字体" },
-    { id: "model3d", label: "3D" },
-    { id: "spine", label: "Spine" },
+    { id: "all", label: "全部资源", icon: List },
+    { id: "recent", label: "最近使用", icon: RotateCw },
+    { id: "favorites", label: "收藏", icon: Heart },
+    { id: "missing", label: "缺失文件", icon: AlertTriangle },
+    { id: "image", label: "图片", icon: FileImage },
+    { id: "audio", label: "音频", icon: Music },
+    { id: "video", label: "视频", icon: Film },
+    { id: "font", label: "字体", icon: Type },
+    { id: "model3d", label: "3D", icon: Box },
+    { id: "spine", label: "Spine", icon: Box },
   ];
 
   const handleCreateCollection = (e: React.FormEvent) => {
@@ -63,7 +79,9 @@ export function LibrarySidebar({
     <aside className="sidebar">
       <div className="panel-heading">资源库</div>
       <nav className="nav-list">
-        {filters.map((filter) => (
+        {filters.map((filter) => {
+          const Icon = filter.icon;
+          return (
           <button
             key={filter.id}
             className={activeFilter === filter.id ? "nav-item active" : "nav-item"}
@@ -72,15 +90,18 @@ export function LibrarySidebar({
               onSelectCollection(null);
             }}
           >
-            {filter.label}
+            <Icon size={15} aria-hidden="true" />
+            <span>{filter.label}</span>
           </button>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="panel-heading secondary">素材文件夹</div>
       <div className="folder-form">
         <button onClick={onPickFolder} className="nav-item" style={{ width: "100%" }}>
-          添加文件夹
+          <Plus size={15} aria-hidden="true" />
+          <span>添加文件夹</span>
         </button>
       </div>
       <div className="folder-list">
@@ -100,13 +121,14 @@ export function LibrarySidebar({
               }}
             >
               <div className="folder-row-header">
-                <span className="folder-name">{folder.name}</span>
+                <span className="folder-name"><Folder size={14} aria-hidden="true" />{folder.name}</span>
                 <div className="folder-row-actions">
                   <button
                     className="open-folder-btn"
                     onClick={(e) => { e.stopPropagation(); onOpenFolder(folder); }}
                     title="打开文件夹"
                   >
+                    <FolderOpen size={13} aria-hidden="true" />
                     打开
                   </button>
                   {isRunning ? (
@@ -124,6 +146,7 @@ export function LibrarySidebar({
                       title="扫描"
                       disabled={isScanning}
                     >
+                      <RotateCw size={13} aria-hidden="true" />
                       扫描
                     </button>
                   )}
@@ -138,7 +161,7 @@ export function LibrarySidebar({
                     title="从资源库移除索引"
                     disabled={isRunning}
                   >
-                    ✕
+                    <Trash2 size={13} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -176,7 +199,7 @@ export function LibrarySidebar({
                 onSelectFolder(null);
               }}
             >
-              <span className="folder-name">{col.name}</span>
+              <span className="folder-name"><List size={14} aria-hidden="true" />{col.name}</span>
             </div>
           );
         })}

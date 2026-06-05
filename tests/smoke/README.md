@@ -124,3 +124,12 @@ Use a fixture folder with the newly covered formats.
 - Use checkboxes to select two assets and confirm the right panel switches to batch mode.
 - Uncheck one selected asset and confirm it is removed from the batch selection.
 - Confirm the favorite button does not change selection.
+
+## Recent Activity Smoke Test
+
+- Open one asset from the details panel.
+- Reveal another asset in its folder.
+- Copy a third asset path.
+- Click `最近使用` in the sidebar and confirm those assets appear.
+- Restart the app and confirm recent activity is loaded from local app data.
+- Confirm these actions do not delete, move, rename, or modify source files.

@@ -13,9 +13,11 @@ import {
   listAssetTags,
   listCollections,
   listLibraryFolders,
+  listRecentAssetActions,
   openAssetFile,
   openLibraryFolder,
   pickLibraryFolder,
+  recordRecentAssetAction,
   revealAssetInFolder,
   saveScanSettings,
   searchAssets,
@@ -63,6 +65,7 @@ function AppInner() {
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [gridAssets, setGridAssets] = useState<Asset[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
+  const [recentAssetIds, setRecentAssetIds] = useState<number[]>([]);
   const searchVersionRef = useRef(0);
 
   const showError = useCallback((e: unknown) => {
@@ -90,6 +93,13 @@ function AppInner() {
       setAssets(assetsWithTags);
       setFolders(folderList);
       setCollections(collectionList);
+
+      try {
+        const actions = await listRecentAssetActions(100);
+        setRecentAssetIds([...new Set(actions.map((action) => action.asset_id))]);
+      } catch {
+        // non-blocking: recent activity is optional
+      }
 
       setLatestJobs(await fetchLatestJobs(folderList));
 
@@ -176,7 +186,7 @@ function AppInner() {
         search_note: scope.note,
         search_path: scope.path,
         search_tags: scope.tag,
-        asset_type: ["all", "favorites", "missing"].includes(activeFilter) ? null : activeFilter,
+        asset_type: ["all", "favorites", "missing", "recent"].includes(activeFilter) ? null : activeFilter,
         library_folder_id: selectedFolderId,
         collection_id: selectedCollectionId,
         is_favorite: activeFilter === "favorites" ? true : null,
@@ -210,7 +220,9 @@ function AppInner() {
     executeSearch();
   }, [executeSearch]);
 
-  const displayAssets = gridAssets;
+  const displayAssets = activeFilter === "recent"
+    ? gridAssets.filter((asset) => recentAssetIds.includes(asset.id))
+    : gridAssets;
 
   const selectedAssets = selectedIds
     .map((id) => {
@@ -307,6 +319,12 @@ function AppInner() {
   const handleOpenFile = useCallback(async (asset: Asset) => {
     try {
       await openAssetFile(asset.absolute_path);
+      try {
+        await recordRecentAssetAction(asset.id, "open_file");
+        setRecentAssetIds((prev) => [asset.id, ...prev.filter((id) => id !== asset.id)].slice(0, 100));
+      } catch (e) {
+        console.error("Failed to record recent action", e);
+      }
     } catch (e) {
       showError(e);
     }
@@ -315,6 +333,12 @@ function AppInner() {
   const handleRevealFile = useCallback(async (asset: Asset) => {
     try {
       await revealAssetInFolder(asset.absolute_path);
+      try {
+        await recordRecentAssetAction(asset.id, "reveal_folder");
+        setRecentAssetIds((prev) => [asset.id, ...prev.filter((id) => id !== asset.id)].slice(0, 100));
+      } catch (e) {
+        console.error("Failed to record recent action", e);
+      }
     } catch (e) {
       showError(e);
     }
@@ -345,6 +369,12 @@ function AppInner() {
     try {
       await navigator.clipboard.writeText(asset.absolute_path);
       showToast("路径已复制", "success");
+      try {
+        await recordRecentAssetAction(asset.id, "copy_path");
+        setRecentAssetIds((prev) => [asset.id, ...prev.filter((id) => id !== asset.id)].slice(0, 100));
+      } catch (e) {
+        console.error("Failed to record recent action", e);
+      }
     } catch (e) {
       showToast((e as any)?.message ?? "复制路径失败", "error");
     }
@@ -357,68 +387,89 @@ function AppInner() {
 
   return (
     <main className="app-shell">
-      <LibrarySidebar
-        folders={folders}
-        collections={collections}
-        activeFilter={activeFilter}
-        selectedFolderId={selectedFolderId}
-        selectedCollectionId={selectedCollectionId}
-        onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
-        onSelectFolder={(id) => { setSelectedFolderId(id); setSelectedCollectionId(null); setSelectedIds([]); }}
-        onSelectCollection={(id) => { setSelectedCollectionId(id); setSelectedFolderId(null); setSelectedIds([]); }}
-        onPickFolder={handlePickFolder}
-        onScanFolder={handleScanFolder}
-        onCancelScan={handleCancelScan}
-        onDeleteFolder={handleDeleteFolder}
-        onOpenFolder={handleOpenFolder}
-        onCreateCollection={handleCreateCollection}
-        isScanning={isScanning}
-        latestJobs={latestJobs}
-        folderCounts={folderCounts}
-        settingsPanel={
-          scanSettings ? (
-            <SettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
-          ) : null
-        }
-      />
-      <section className="workspace">
-        <SearchToolbar query={query} scope={scope} onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }} onScopeChange={(s) => { setScope(s); setSelectedIds([]); }} />
-        {scanMessage && (
-          <div className="scan-summary" onClick={() => setScanMessage(null)}>
-            {scanMessage}
+      <header className="app-topbar">
+        <div className="app-brand">
+          <div className="app-mark" aria-hidden="true">GR</div>
+          <div>
+            <div className="app-title">游戏资源管理器</div>
+            <div className="app-subtitle">本地素材索引 · 不接管原文件结构</div>
           </div>
-        )}
-        {Object.values(latestJobs)
-          .filter(Boolean)
-          .map((job) => (
-            <ScanStatusBar key={job!.id} job={job!} />
-          ))}
-        {!hasFolders ? (
-          <EmptyState variant="no-folders" />
-        ) : isEmptySearch && hasScanned ? (
-          <EmptyState variant="no-results" />
-        ) : !hasScanned ? (
-          <EmptyState variant="no-assets" />
-        ) : (
-          <AssetGrid
-            assets={displayAssets}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            onToggleFavorite={handleToggleFavorite}
-          />
-        )}
-      </section>
-      <DetailsPanel
-        selectedAssets={selectedAssets}
-        collections={collections}
-        onOpenFile={handleOpenFile}
-        onReveal={handleRevealFile}
-        onCopyPath={handleCopyPath}
-        onApplyTag={handleApplyTag}
-        onToggleFavorite={handleToggleFavorite}
-        onAddToCollection={handleAddToCollection}
-        onUpdateNote={handleUpdateNote}
-      />
+        </div>
+        <div className="app-topbar-stats" aria-label="资源统计">
+          <span className="app-build-marker">新版界面 0.2.1</span>
+          <span>{folders.length} 个资源库</span>
+          <span>{assets.length} 个资源</span>
+          <span>{selectedIds.length} 个已选</span>
+        </div>
+      </header>
+      <div className="workbench-shell">
+        <LibrarySidebar
+          folders={folders}
+          collections={collections}
+          activeFilter={activeFilter}
+          selectedFolderId={selectedFolderId}
+          selectedCollectionId={selectedCollectionId}
+          onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
+          onSelectFolder={(id) => { setSelectedFolderId(id); setSelectedCollectionId(null); setSelectedIds([]); }}
+          onSelectCollection={(id) => { setSelectedCollectionId(id); setSelectedFolderId(null); setSelectedIds([]); }}
+          onPickFolder={handlePickFolder}
+          onScanFolder={handleScanFolder}
+          onCancelScan={handleCancelScan}
+          onDeleteFolder={handleDeleteFolder}
+          onOpenFolder={handleOpenFolder}
+          onCreateCollection={handleCreateCollection}
+          isScanning={isScanning}
+          latestJobs={latestJobs}
+          folderCounts={folderCounts}
+          settingsPanel={
+            scanSettings ? (
+              <SettingsPanel settings={scanSettings} onChange={handleScanSettingsChange} />
+            ) : null
+          }
+        />
+        <section className="workspace">
+          <SearchToolbar query={query} scope={scope} onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }} onScopeChange={(s) => { setScope(s); setSelectedIds([]); }} />
+          <div className="workspace-meta">
+            <span>{displayAssets.length} 个结果</span>
+            <span>网格视图</span>
+          </div>
+          {scanMessage && (
+            <div className="scan-summary" onClick={() => setScanMessage(null)}>
+              {scanMessage}
+            </div>
+          )}
+          {Object.values(latestJobs)
+            .filter(Boolean)
+            .map((job) => (
+              <ScanStatusBar key={job!.id} job={job!} />
+            ))}
+          {!hasFolders ? (
+            <EmptyState variant="no-folders" />
+          ) : isEmptySearch && hasScanned ? (
+            <EmptyState variant="no-results" />
+          ) : !hasScanned ? (
+            <EmptyState variant="no-assets" />
+          ) : (
+            <AssetGrid
+              assets={displayAssets}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              onToggleFavorite={handleToggleFavorite}
+            />
+          )}
+        </section>
+        <DetailsPanel
+          selectedAssets={selectedAssets}
+          collections={collections}
+          onOpenFile={handleOpenFile}
+          onReveal={handleRevealFile}
+          onCopyPath={handleCopyPath}
+          onApplyTag={handleApplyTag}
+          onToggleFavorite={handleToggleFavorite}
+          onAddToCollection={handleAddToCollection}
+          onUpdateNote={handleUpdateNote}
+        />
+      </div>
     </main>
   );
 }

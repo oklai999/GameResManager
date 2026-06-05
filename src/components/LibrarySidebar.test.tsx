@@ -13,6 +13,33 @@ function makeCollection(id: number, name: string): Collection {
 }
 
 describe("LibrarySidebar", () => {
+  it("shows recent activity filter", () => {
+    render(
+      <LibrarySidebar
+        folders={[]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /最近使用/ })).toBeInTheDocument();
+  });
+
   it("calls onPickFolder when add folder button is clicked", async () => {
     const onPickFolder = vi.fn();
     render(
