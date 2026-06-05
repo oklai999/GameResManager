@@ -126,6 +126,12 @@ pub async fn create_or_get_tag(db: &Db, name: &str) -> anyhow::Result<i64> {
     .execute(db)
     .await?;
 
+    sqlx::query("UPDATE tags SET last_used_at = ?1 WHERE name = ?2")
+        .bind(&now)
+        .bind(&normalized)
+        .execute(db)
+        .await?;
+
     let id: (i64,) = sqlx::query_as("SELECT id FROM tags WHERE name = ?1")
         .bind(&normalized)
         .fetch_one(db)
@@ -1326,5 +1332,21 @@ mod recent_tag_tests {
         let tags = list_recent_tags(&db, -5).await.unwrap();
 
         assert!(tags.is_empty());
+    }
+
+    #[tokio::test]
+    async fn reusing_existing_tag_updates_last_used_at() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO tags (name, color, created_at, last_used_at) VALUES ('旧标签', '#5B8DEF', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO tags (name, color, created_at, last_used_at) VALUES ('新标签', '#5B8DEF', '2026-01-01T00:00:00Z', '2026-01-04T00:00:00Z')")
+            .execute(&db).await.unwrap();
+
+        // 复用旧标签，触发 last_used_at 刷新
+        create_or_get_tag(&db, "旧标签").await.unwrap();
+
+        let tags = list_recent_tags(&db, 10).await.unwrap();
+        let names: Vec<String> = tags.into_iter().map(|tag| tag.name).collect();
+        assert_eq!(names, vec!["旧标签", "新标签"]);
     }
 }
