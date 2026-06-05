@@ -416,4 +416,52 @@ describe("DetailsPanel", () => {
     expect(screen.getByRole("button", { name: "复制文件夹路径" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制文件名" })).toBeInTheDocument();
   });
+
+  it("clears old res:// button immediately when projectRoot changes", async () => {
+    const { assetPathVariants } = await import("../api/tauri");
+    vi.mocked(assetPathVariants).mockResolvedValueOnce({
+      absolute_path: "C:/project/assets/1.png",
+      forward_slash_path: "C:/project/assets/1.png",
+      folder_path: "C:/project/assets",
+      file_name: "1.png",
+      godot_res_path: "res://assets/1.png",
+    });
+    vi.mocked(assetPathVariants).mockImplementation(() => new Promise(() => {}));
+
+    const { rerender } = render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+        projectRoot="C:/project"
+      />
+    );
+
+    await screen.findByRole("button", { name: "复制 res:// 路径" });
+
+    rerender(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+        projectRoot="C:/other"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "复制 res:// 路径" })).not.toBeInTheDocument();
+    });
+  });
 });

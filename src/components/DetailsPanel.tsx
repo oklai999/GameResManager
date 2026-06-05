@@ -99,6 +99,7 @@ export function DetailsPanel({
       setPathVariants(null);
       return;
     }
+    setPathVariants(null);
     assetPathVariants(selectedAssets[0].absolute_path, root)
       .then((pv) => { if (!cancelled) setPathVariants(pv); })
       .catch(() => { if (!cancelled) setPathVariants(null); });
