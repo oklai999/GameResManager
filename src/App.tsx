@@ -68,6 +68,7 @@ function AppInner() {
   const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
   const [recentAssetIds, setRecentAssetIds] = useState<number[]>([]);
   const [recentTags, setRecentTags] = useState<string[]>([]);
+  const [projectRoot, setProjectRoot] = useState("");
   const searchVersionRef = useRef(0);
 
   const showError = useCallback((e: unknown) => {
@@ -474,6 +475,8 @@ function AppInner() {
         onUpdateNote={handleUpdateNote}
         recentTags={recentTags}
         onCopyText={handleCopyText}
+        projectRoot={projectRoot}
+        onProjectRootChange={setProjectRoot}
       />
     </main>
   );

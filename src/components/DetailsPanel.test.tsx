@@ -9,6 +9,13 @@ vi.mock("../api/tauri", () => ({
   listCommonTags: vi.fn().mockResolvedValue([]),
   listTags: vi.fn().mockResolvedValue([]),
   updateAssetNote: vi.fn().mockResolvedValue({}),
+  assetPathVariants: vi.fn().mockResolvedValue({
+    absolute_path: "",
+    forward_slash_path: "",
+    folder_path: "",
+    file_name: "",
+    godot_res_path: null,
+  }),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -305,5 +312,108 @@ describe("DetailsPanel", () => {
     await waitFor(() => {
       expect(onUpdateNote).toHaveBeenCalledWith(updatedAsset);
     });
+  });
+
+  it("does not show res:// button without project root", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole("button", { name: "复制绝对路径" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制 res:// 路径" })).not.toBeInTheDocument();
+    expect(screen.queryByText("不在项目根目录下")).not.toBeInTheDocument();
+  });
+
+  it("shows res:// button when asset is inside project root", async () => {
+    const { assetPathVariants } = await import("../api/tauri");
+    const onCopyText = vi.fn();
+    vi.mocked(assetPathVariants).mockResolvedValueOnce({
+      absolute_path: "C:/project/assets/1.png",
+      forward_slash_path: "C:/project/assets/1.png",
+      folder_path: "C:/project/assets",
+      file_name: "1.png",
+      godot_res_path: "res://assets/1.png",
+    });
+
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={onCopyText}
+        projectRoot="C:/project"
+      />
+    );
+
+    const resBtn = await screen.findByRole("button", { name: "复制 res:// 路径" });
+    expect(resBtn).toBeInTheDocument();
+    await userEvent.click(resBtn);
+    expect(onCopyText).toHaveBeenCalledWith("res://assets/1.png");
+  });
+
+  it("shows not-in-project message when asset is outside project root", async () => {
+    const { assetPathVariants } = await import("../api/tauri");
+    vi.mocked(assetPathVariants).mockResolvedValueOnce({
+      absolute_path: "C:/other/assets/1.png",
+      forward_slash_path: "C:/other/assets/1.png",
+      folder_path: "C:/other/assets",
+      file_name: "1.png",
+      godot_res_path: null,
+    });
+
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+        projectRoot="C:/project"
+      />
+    );
+
+    expect(await screen.findByText("不在项目根目录下")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制 res:// 路径" })).not.toBeInTheDocument();
+  });
+
+  it("existing absolute copy button still exists when project root is set", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        onCopyText={vi.fn()}
+        projectRoot="C:/project"
+      />
+    );
+
+    expect(await screen.findByRole("button", { name: "复制绝对路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制正斜杠路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制文件夹路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制文件名" })).toBeInTheDocument();
   });
 });

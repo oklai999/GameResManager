@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Copy, ExternalLink, FolderOpen, Star } from "lucide-react";
-import type { Asset, Collection } from "../types/asset";
-import { getAssetTags, listCommonTags, updateAssetNote } from "../api/tauri";
+import type { Asset, AssetPathVariants, Collection } from "../types/asset";
+import { assetPathVariants, getAssetTags, listCommonTags, updateAssetNote } from "../api/tauri";
 import { EmptyState } from "./EmptyState";
 import { TagEditor } from "./TagEditor";
 
@@ -18,6 +18,8 @@ type Props = {
   onUpdateNote?: (asset: Asset) => void;
   recentTags?: string[];
   onCopyText?: (text: string) => void;
+  projectRoot?: string;
+  onProjectRootChange?: (root: string) => void;
 };
 
 function formatFileSize(bytes: number): string {
@@ -52,11 +54,14 @@ export function DetailsPanel({
   onUpdateNote,
   recentTags = [],
   onCopyText,
+  projectRoot,
+  onProjectRootChange,
 }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [pathVariants, setPathVariants] = useState<AssetPathVariants | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +87,23 @@ export function DetailsPanel({
     }
     return () => { cancelled = true; };
   }, [selectedAssets.length, selectedAssets[0]?.id, selectedAssets[0]?.note]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedAssets.length !== 1) {
+      setPathVariants(null);
+      return;
+    }
+    const root = projectRoot?.trim() || null;
+    if (!root) {
+      setPathVariants(null);
+      return;
+    }
+    assetPathVariants(selectedAssets[0].absolute_path, root)
+      .then((pv) => { if (!cancelled) setPathVariants(pv); })
+      .catch(() => { if (!cancelled) setPathVariants(null); });
+    return () => { cancelled = true; };
+  }, [selectedAssets.length, selectedAssets[0]?.absolute_path, projectRoot]);
 
   const saveNote = useCallback(async () => {
     if (noteSaving) return;
@@ -181,12 +203,32 @@ export function DetailsPanel({
           </div>
           <div className="detail-row path">{asset.absolute_path}</div>
           {onCopyText && (
-            <div className="path-variant-actions">
-              <button onClick={() => onCopyText(asset.absolute_path)}>复制绝对路径</button>
-              <button onClick={() => onCopyText(asset.absolute_path.replace(/\\/g, "/"))}>复制正斜杠路径</button>
-              <button onClick={() => onCopyText(getFolderPath(asset.absolute_path))}>复制文件夹路径</button>
-              <button onClick={() => onCopyText(asset.file_name)}>复制文件名</button>
-            </div>
+            <>
+              <div className="path-variant-actions">
+                <button onClick={() => onCopyText(asset.absolute_path)}>复制绝对路径</button>
+                <button onClick={() => onCopyText(asset.absolute_path.replace(/\\/g, "/"))}>复制正斜杠路径</button>
+                <button onClick={() => onCopyText(getFolderPath(asset.absolute_path))}>复制文件夹路径</button>
+                <button onClick={() => onCopyText(asset.file_name)}>复制文件名</button>
+              </div>
+              <div className="project-root-row">
+                <input
+                  className="tag-input"
+                  type="text"
+                  value={projectRoot ?? ""}
+                  onChange={(e) => onProjectRootChange?.(e.target.value)}
+                  placeholder="项目根目录（可选）"
+                />
+              </div>
+              {projectRoot?.trim() && (
+                <div className="path-variant-actions">
+                  {pathVariants?.godot_res_path ? (
+                    <button onClick={() => onCopyText(pathVariants.godot_res_path!)}>复制 res:// 路径</button>
+                  ) : (
+                    <span className="muted">不在项目根目录下</span>
+                  )}
+                </div>
+              )}
+            </>
           )}
           {asset.thumbnail_status === "failed" && asset.thumbnail_error && (
             <div className="detail-row error-text">缩略图错误：{asset.thumbnail_error}</div>
