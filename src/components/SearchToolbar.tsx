@@ -1,3 +1,4 @@
+import { Search } from "lucide-react";
 import type { SearchScope } from "../types/asset";
 
 type Props = {
@@ -12,17 +13,37 @@ export function SearchToolbar({ query, scope, onQueryChange, onScopeChange }: Pr
     onScopeChange({ ...scope, [key]: !scope[key] });
   }
 
+  const scopeItems: { key: keyof SearchScope; label: string }[] = [
+    { key: "fileName", label: "文件名" },
+    { key: "tag", label: "标签" },
+    { key: "note", label: "备注" },
+    { key: "path", label: "路径" },
+  ];
+
   return (
     <header className="search-toolbar">
-      <input
-        value={query}
-        onChange={(event) => onQueryChange(event.target.value)}
-        placeholder="搜索文件名、标签、备注或路径"
-      />
-      <label><input type="checkbox" checked={scope.fileName} onChange={() => toggle("fileName")} /> 文件名</label>
-      <label><input type="checkbox" checked={scope.tag} onChange={() => toggle("tag")} /> 标签</label>
-      <label><input type="checkbox" checked={scope.note} onChange={() => toggle("note")} /> 备注</label>
-      <label><input type="checkbox" checked={scope.path} onChange={() => toggle("path")} /> 路径</label>
+      <div className="search-input-wrap">
+        <Search className="search-input-icon" size={16} aria-hidden="true" />
+        <input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="搜索资源..."
+          aria-label="搜索资源"
+        />
+      </div>
+      <div className="scope-segments" aria-label="搜索范围">
+        {scopeItems.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            className={scope[key] ? "scope-segment active" : "scope-segment"}
+            aria-pressed={scope[key]}
+            onClick={() => toggle(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </header>
   );
 }

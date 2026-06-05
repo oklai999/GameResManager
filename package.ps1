@@ -10,7 +10,9 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProductName = "游戏资源管理器"
-$Version = "0.2.0"
+$TauriConfigPath = Join-Path $ProjectRoot "src-tauri" "tauri.conf.json"
+$TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
+$Version = [string]$TauriConfig.version
 
 function Write-Step {
     param([string]$Message)
