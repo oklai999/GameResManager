@@ -405,11 +405,18 @@ pub async fn asset_path_variants(
         .unwrap_or_default();
 
     let godot_res_path = project_root.and_then(|root| {
-        let root_normalized = root.replace('\\', "/");
+        let root = root.replace('\\', "/").trim_end_matches('/').to_string();
+        if root.is_empty() {
+            return None;
+        }
         let path_normalized = path.replace('\\', "/");
-        path_normalized
-            .strip_prefix(&root_normalized)
-            .map(|relative| format!("res://{}", relative.trim_start_matches('/')))
+        if path_normalized == root {
+            Some("res://".to_string())
+        } else if let Some(rest) = path_normalized.strip_prefix(&format!("{}/", root)) {
+            Some(format!("res://{}", rest))
+        } else {
+            None
+        }
     });
 
     Ok(crate::models::AssetPathVariants {
@@ -457,6 +464,18 @@ mod path_variant_tests {
     async fn godot_res_path_is_none_when_outside_project_root() {
         let result = asset_path_variants(
             "C:/other/assets/icon.png".to_string(),
+            Some("C:/project".to_string()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.godot_res_path, None);
+    }
+
+    #[tokio::test]
+    async fn godot_res_path_is_none_for_adjacent_directory() {
+        let result = asset_path_variants(
+            "C:/project2/assets/icon.png".to_string(),
             Some("C:/project".to_string()),
         )
         .await
