@@ -148,6 +148,15 @@ pub struct FolderAssetCounts {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetPathVariants {
+    pub absolute_path: String,
+    pub forward_slash_path: String,
+    pub folder_path: String,
+    pub file_name: String,
+    pub godot_res_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetSearchRequest {
     pub query: String,
     pub search_file_name: bool,

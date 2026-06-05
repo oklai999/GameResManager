@@ -384,3 +384,96 @@ pub async fn create_library_folder_from_path(
     }
     result.map_err(CommandError::from)
 }
+
+#[tauri::command]
+pub async fn asset_path_variants(
+    path: String,
+    project_root: Option<String>,
+) -> Result<crate::models::AssetPathVariants, CommandError> {
+    let forward_slash_path = path.replace('\\', "/");
+
+    let p = std::path::Path::new(&path);
+    let file_name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let folder_path = p
+        .parent()
+        .map(|parent| parent.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let godot_res_path = project_root.and_then(|root| {
+        let root_normalized = root.replace('\\', "/");
+        let path_normalized = path.replace('\\', "/");
+        path_normalized
+            .strip_prefix(&root_normalized)
+            .map(|relative| format!("res://{}", relative.trim_start_matches('/')))
+    });
+
+    Ok(crate::models::AssetPathVariants {
+        absolute_path: path,
+        forward_slash_path,
+        folder_path,
+        file_name,
+        godot_res_path,
+    })
+}
+
+#[cfg(test)]
+mod path_variant_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn derives_file_name_folder_and_forward_slash_for_windows_path() {
+        let result = asset_path_variants("C:\\project\\assets\\icon.png".to_string(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.absolute_path, "C:\\project\\assets\\icon.png");
+        assert_eq!(result.forward_slash_path, "C:/project/assets/icon.png");
+        assert_eq!(result.folder_path, "C:\\project\\assets");
+        assert_eq!(result.file_name, "icon.png");
+        assert_eq!(result.godot_res_path, None);
+    }
+
+    #[tokio::test]
+    async fn derives_godot_res_path_when_inside_project_root() {
+        let result = asset_path_variants(
+            "C:/project/assets/icon.png".to_string(),
+            Some("C:/project".to_string()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.godot_res_path,
+            Some("res://assets/icon.png".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn godot_res_path_is_none_when_outside_project_root() {
+        let result = asset_path_variants(
+            "C:/other/assets/icon.png".to_string(),
+            Some("C:/project".to_string()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.godot_res_path, None);
+    }
+
+    #[tokio::test]
+    async fn godot_res_path_is_none_without_project_root() {
+        let result = asset_path_variants(
+            "C:/project/assets/icon.png".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.godot_res_path, None);
+    }
+}

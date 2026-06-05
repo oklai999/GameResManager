@@ -85,7 +85,8 @@ pub fn run() {
             commands::open_library_folder,
             commands::get_folder_asset_counts,
             commands::record_recent_asset_action,
-            commands::list_recent_asset_actions
+            commands::list_recent_asset_actions,
+            commands::asset_path_variants
         ])
         .run(tauri::generate_context!())
         .expect("failed to run app");

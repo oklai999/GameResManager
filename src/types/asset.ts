@@ -77,6 +77,14 @@ export type RecentAssetAction = {
   created_at: string;
 };
 
+export type AssetPathVariants = {
+  absolute_path: string;
+  forward_slash_path: string;
+  folder_path: string;
+  file_name: string;
+  godot_res_path: string | null;
+};
+
 export type Tag = {
   id: number;
   name: string;

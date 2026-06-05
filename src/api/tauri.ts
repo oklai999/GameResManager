@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Asset, AssetSearchRequest, Collection, FolderAssetCounts, LibraryFolder, RecentAssetAction, ScanJob, ScanSettings, Tag } from "../types/asset";
+import type { Asset, AssetPathVariants, AssetSearchRequest, Collection, FolderAssetCounts, LibraryFolder, RecentAssetAction, ScanJob, ScanSettings, Tag } from "../types/asset";
 
 export async function listAssets(): Promise<Asset[]> {
   return invoke<Asset[]>("list_assets");
@@ -130,4 +130,11 @@ export async function recordRecentAssetAction(
 
 export async function listRecentAssetActions(limit: number): Promise<RecentAssetAction[]> {
   return invoke<RecentAssetAction[]>("list_recent_asset_actions", { limit });
+}
+
+export async function assetPathVariants(
+  path: string,
+  projectRoot: string | null
+): Promise<AssetPathVariants> {
+  return invoke<AssetPathVariants>("asset_path_variants", { path, projectRoot });
 }
