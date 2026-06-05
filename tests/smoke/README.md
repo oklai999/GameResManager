@@ -115,3 +115,12 @@ Use a fixture folder with the newly covered formats.
 - [ ] Confirm search, filter, and details panel do not fall back to vague "无预览" for any of the above types.
 - [ ] Select each file and confirm the details panel still shows path, size, modified time, open file, open folder, and copy path.
 - [ ] Confirm no source file is deleted, moved, renamed, or modified.
+
+## Selection UX Smoke Test
+
+- Click one asset card and confirm the right panel shows that single asset.
+- Click another asset card and confirm selection changes to only the second asset.
+- Click the selected asset card again and confirm it remains selected.
+- Use checkboxes to select two assets and confirm the right panel switches to batch mode.
+- Uncheck one selected asset and confirm it is removed from the batch selection.
+- Confirm the favorite button does not change selection.

@@ -70,11 +70,15 @@ function assetTypeIcon(assetType: Asset["asset_type"]) {
 export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite }: Props) {
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
 
-  function toggle(assetId: number) {
+  function selectOnly(assetId: number) {
+    onSelectionChange([assetId]);
+  }
+
+  function toggleMulti(assetId: number, checked: boolean) {
     onSelectionChange(
-      selectedIds.includes(assetId)
-        ? selectedIds.filter((id) => id !== assetId)
-        : [...selectedIds, assetId]
+      checked
+        ? [...selectedIds.filter((id) => id !== assetId), assetId]
+        : selectedIds.filter((id) => id !== assetId)
     );
   }
 
@@ -98,11 +102,19 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
           <div
             key={asset.id}
             className={selectedIds.includes(asset.id) ? "asset-card selected" : "asset-card"}
-            onClick={() => toggle(asset.id)}
+            onClick={() => selectOnly(asset.id)}
             title={asset.absolute_path}
             role="button"
             tabIndex={0}
           >
+            <input
+              type="checkbox"
+              className="asset-select-checkbox"
+              checked={selectedIds.includes(asset.id)}
+              aria-label={`选择 ${asset.file_name}`}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => toggleMulti(asset.id, event.currentTarget.checked)}
+            />
             <div className="thumb">
               <span className="asset-type-badge">
                 {assetTypeIcon(asset.asset_type)}

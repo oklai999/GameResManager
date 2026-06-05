@@ -122,4 +122,77 @@ describe("AssetGrid", () => {
     expect(texts).toContain("Spine");
     expect(texts).toContain("3D");
   });
+
+  it("single-selects an asset when the card is clicked", async () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <AssetGrid
+        assets={[
+          asset,
+          makeAsset({ id: 2, file_name: "tree.png", absolute_path: "C:/assets/tree.png" }),
+        ]}
+        selectedIds={[2]}
+        onSelectionChange={onSelectionChange}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByTitle("C:/assets/icon.png"));
+
+    expect(onSelectionChange).toHaveBeenCalledWith([1]);
+  });
+
+  it("keeps the selected card selected when it is clicked again", async () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <AssetGrid
+        assets={[asset]}
+        selectedIds={[1]}
+        onSelectionChange={onSelectionChange}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByTitle("C:/assets/icon.png"));
+
+    expect(onSelectionChange).toHaveBeenCalledWith([1]);
+  });
+
+  it("uses card checkboxes for multi-select", async () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <AssetGrid
+        assets={[
+          asset,
+          makeAsset({ id: 2, file_name: "tree.png", absolute_path: "C:/assets/tree.png" }),
+        ]}
+        selectedIds={[1]}
+        onSelectionChange={onSelectionChange}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "选择 tree.png" }));
+
+    expect(onSelectionChange).toHaveBeenCalledWith([1, 2]);
+  });
+
+  it("removes an asset from multi-select when its checkbox is unchecked", async () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <AssetGrid
+        assets={[
+          asset,
+          makeAsset({ id: 2, file_name: "tree.png", absolute_path: "C:/assets/tree.png" }),
+        ]}
+        selectedIds={[1, 2]}
+        onSelectionChange={onSelectionChange}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "选择 tree.png" }));
+
+    expect(onSelectionChange).toHaveBeenCalledWith([1]);
+  });
 });
