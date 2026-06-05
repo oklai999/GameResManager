@@ -70,6 +70,13 @@ export type AssetSearchRequest = {
   offset: number;
 };
 
+export type RecentAssetAction = {
+  id: number;
+  asset_id: number;
+  action_type: "open_file" | "reveal_folder" | "copy_path";
+  created_at: string;
+};
+
 export type Tag = {
   id: number;
   name: string;
