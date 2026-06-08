@@ -1,16 +1,51 @@
 # Game Resource Manager / 游戏资源管理器
 
-Game Resource Manager is a local-first desktop MVP for indexing local game asset folders, browsing thumbnails, searching and filtering assets, applying tags, marking favorites, and using safe file actions.
+Game Resource Manager is a local-first Windows desktop app for organizing game art and asset folders into a searchable, previewable resource library.
 
-游戏资源管理器是一个本地优先的桌面端 MVP，用于索引本地游戏素材文件夹、浏览缩略图、搜索和筛选资源、添加标签、标记收藏，并提供安全的文件操作。
+游戏资源管理器是一个本地优先的 Windows 桌面游戏素材管理器，用于把多个本地素材文件夹整理成可搜索、可预览、可收藏、可标注的资源库。
 
-The app does not delete, move, rename, or modify original asset files.
+The app only manages indexes, thumbnails, tags, collections, notes, and recent actions. It does **not** delete, move, rename, or modify original asset files.
 
-本应用不会删除、移动、重命名或修改原始素材文件。
+本应用只管理索引、缩略图、标签、集合、备注和最近操作记录。它**不会删除、移动、重命名或修改原始素材文件**。
+
+## Status
+
+- Current version: `0.2.1`
+- Platform focus: Windows desktop
+- Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag efficiency, path variants, and advanced filters
+- License: MIT
+
+## Features
+
+- Add local asset folders with a native directory picker.
+- Scan and index common game asset formats.
+- Generate WebP thumbnails for image assets.
+- Keep thumbnails and SQLite data in the Tauri app data directory, outside source asset folders.
+- Browse assets in a three-column workbench: library filters, asset grid, and details/batch actions.
+- Search by file name, tags, notes, and path.
+- Filter by type, folder, collection, favorite state, missing state, file size, dimensions, and modified time.
+- Sort by file name, size, modified time, or asset type.
+- Mark assets as favorites.
+- Apply tags to one or more assets, with recent tag suggestions.
+- Create collections and add assets to collections.
+- Edit per-asset notes.
+- Track recent open/reveal/copy-path actions.
+- Open files, reveal containing folders, and copy absolute paths.
+- Optionally derive Godot-style `res://` paths when an explicit project root is provided.
+- Show scan progress, support cancellation, and preserve already-indexed assets when a scan is cancelled.
+- Mark missing files in the index instead of deleting records or touching source files.
+
+## Supported Asset Types
+
+- Image: `png`, `jpg`, `jpeg`, `webp`, `bmp`, `gif`, `psd`
+- Audio: `mp3`, `wav`, `ogg`, `flac`, `aac`, `m4a`
+- Video: `mp4`, `mov`, `webm`, `avi`, `mkv`
+- Font: `ttf`, `otf`, `woff`, `woff2`
+- 3D: `gltf`, `glb`, `obj`, `fbx`, `usd`, `usdz`
+- Spine: `skel`, `json`, `atlas`, `spine`
+- Other files are indexed as `other` when they pass scan rules.
 
 ## Tech Stack
-
-- 技术栈：
 
 - Tauri 2
 - React 18
@@ -18,109 +53,27 @@ The app does not delete, move, rename, or modify original asset files.
 - Vite
 - Rust
 - SQLite via `sqlx`
-- Image thumbnails via Rust `image`
-- Frontend tests via Vitest
-
-## Features
-
-- 功能：
-
-- Add local asset folders.
-- 添加本地素材文件夹。
-- Scan folders and index common game asset file types.
-- 扫描文件夹并索引常见游戏素材类型。
-- Generate WebP thumbnails for image assets.
-- 为图片素材生成 WebP 缩略图。
-- Store thumbnails in the Tauri app data directory.
-- 将缩略图保存到 Tauri 应用数据目录。
-- Browse assets in a three-column workbench.
-- 使用三栏工作台浏览资源。
-- Search by file name, tag, note, or path.
-- 按文件名、标签、备注或路径搜索。
-- Filter by asset type, favorites, and missing files.
-- 按资源类型、收藏和缺失文件筛选。
-- Favorite and unfavorite assets.
-- 收藏或取消收藏资源。
-- Apply tags to one or more assets.
-- 给单个或多个资源添加标签。
-- Open files, reveal containing folders, and copy asset paths.
-- 打开文件、打开所在目录并复制资源路径。
-- Keep source files unchanged.
-- 保持源文件不变。
-
-## Supported Asset Types
-
-- 支持的资源类型：
-
-- Image: `png`, `jpg`, `jpeg`, `webp`, `bmp`, `gif`, `psd`
-- Audio: `mp3`, `wav`, `ogg`, `flac`
-- Video: `mp4`, `mov`, `webm`, `avi`
-- Font: `ttf`, `otf`, `woff`, `woff2`
-- 3D: `gltf`, `glb`, `obj`, `fbx`
-- Spine: `skel`, `json`, `atlas`
-
-## Project Structure
-
-项目结构：
-
-```text
-.
-|-- src/
-|   |-- api/             # Typed Tauri command wrappers
-|   |-- components/      # React UI components
-|   |-- test/            # Frontend test setup
-|   |-- types/           # Frontend domain types
-|   |-- App.tsx          # Main workbench state and layout
-|   |-- main.tsx         # React entry point
-|   `-- styles.css       # App styles
-|-- src-tauri/
-|   |-- capabilities/    # Tauri v2 permissions
-|   |-- migrations/      # SQLite migrations
-|   |-- src/
-|   |   |-- commands.rs  # Tauri command boundary
-|   |   |-- db.rs        # SQLite connection and repositories
-|   |   |-- file_actions.rs
-|   |   |-- indexer.rs
-|   |   |-- lib.rs
-|   |   |-- main.rs
-|   |   |-- models.rs
-|   |   |-- tags.rs
-|   |   `-- thumbnails.rs
-|   |-- Cargo.toml
-|   `-- tauri.conf.json
-|-- tests/
-|   `-- smoke/           # Manual QA checklist
-|-- package.json
-|-- tsconfig.json
-`-- vite.config.ts
-```
+- Rust `image` crate for thumbnails
+- Vitest + Testing Library for frontend tests
 
 ## Requirements
 
-- 环境要求：
-
 - Node.js and npm
 - Rust stable toolchain
-- Tauri prerequisites for your operating system
-- Windows build tools for Rust native dependencies
+- Tauri prerequisites for Windows
+- MSVC build tools and Windows SDK for Rust native dependencies
 
-On Windows, make sure the MSVC toolchain and Windows SDK headers are installed correctly. Missing headers such as `stdarg.h` or `excpt.h` indicate a local Visual Studio or Windows SDK setup issue.
+On Windows, errors about missing `stdarg.h`, `excpt.h`, or `msvcrt.lib` usually indicate a local Visual Studio or Windows SDK configuration issue rather than an application code issue.
 
-在 Windows 上，请确认 MSVC 工具链和 Windows SDK 头文件已正确安装。如果出现缺少 `stdarg.h` 或 `excpt.h`，通常表示本机 Visual Studio 或 Windows SDK 环境有问题。
+## Quick Start
 
-## Setup
-
-安装依赖：
+Install dependencies:
 
 ```powershell
 npm install
 ```
 
-## Development
-
-Run the Tauri desktop app:
-
-运行 Tauri 桌面应用：
+Run the full desktop app in development mode:
 
 ```powershell
 npm run tauri dev
@@ -128,33 +81,39 @@ npm run tauri dev
 
 Run only the Vite frontend:
 
-只运行 Vite 前端：
-
 ```powershell
 npm run dev
 ```
 
-## Verification
-
-Run frontend tests:
-
-运行前端测试：
-
-```powershell
-npm test
-```
-
 Build the frontend:
-
-构建前端：
 
 ```powershell
 npm run build
 ```
 
-Run Rust tests:
+Build the Tauri app:
 
-运行 Rust 测试：
+```powershell
+npx tauri build
+```
+
+Create local release artifacts under `releases/`:
+
+```powershell
+.\package.ps1
+```
+
+`releases/` is intentionally ignored by Git. Publish release binaries through GitHub Releases instead of committing them to the repository.
+
+## Verification
+
+Run frontend tests:
+
+```powershell
+npm test
+```
+
+Run Rust tests:
 
 ```powershell
 cd src-tauri
@@ -163,83 +122,106 @@ cargo test
 
 Run Rust compile checks:
 
-运行 Rust 编译检查：
-
 ```powershell
 cd src-tauri
 cargo check
 ```
 
-Expected current status:
+Current local verification baseline:
 
-当前预期结果：
-
-- `npm test`: 20+ tests passing.
-- `npm test`：20+ 个测试通过。
+- `npm test`: 58 frontend tests passing.
 - `npm run build`: succeeds.
-- `npm run build`：构建成功。
-- `cargo test`: 57+ tests passing when the local MSVC and Windows SDK environment is configured.
-- `cargo test`：本机 MSVC 和 Windows SDK 环境配置正确时 57+ 测试通过。
-- `cargo check`: passes when the local MSVC and Windows SDK environment is configured.
-- `cargo check`：本机 MSVC 和 Windows SDK 环境配置正确时通过。
+- `cargo test`: 82 Rust unit tests plus the build script integration test passing.
+- `cargo check`: succeeds when the local MSVC and Windows SDK environment is configured.
 
-## Manual Smoke QA
+Manual smoke checks live in [tests/smoke/README.md](tests/smoke/README.md).
 
-See [tests/smoke/README.md](tests/smoke/README.md).
+## Project Structure
 
-参见 [tests/smoke/README.md](tests/smoke/README.md)。
+```text
+.
+|-- src/
+|   |-- api/             # Typed Tauri command wrappers
+|   |-- components/      # React workbench UI components
+|   |-- test/            # Frontend test setup
+|   |-- types/           # Frontend domain types
+|   |-- App.tsx          # Main UI state and command orchestration
+|   |-- main.tsx         # React entry point
+|   `-- styles.css       # App styles
+|-- src-tauri/
+|   |-- capabilities/    # Tauri v2 permissions
+|   |-- migrations/      # SQLite schema migrations
+|   |-- src/
+|   |   |-- commands.rs      # Tauri command boundary
+|   |   |-- db.rs            # SQLite connection and repositories
+|   |   |-- file_actions.rs  # Safe OS file actions
+|   |   |-- indexer.rs       # File classification and scan rules
+|   |   |-- lib.rs           # Tauri bootstrap and state registration
+|   |   |-- models.rs        # Rust domain models
+|   |   |-- scan_service.rs  # Background scan jobs
+|   |   |-- search.rs        # Search/filter SQL composition
+|   |   |-- tags.rs          # Tag normalization
+|   |   `-- thumbnails.rs    # Thumbnail generation
+|   |-- Cargo.toml
+|   `-- tauri.conf.json
+|-- tests/
+|   `-- smoke/           # Manual QA checklist
+|-- package.json
+|-- package.ps1
+|-- tsconfig.json
+`-- vite.config.ts
+```
 
-Recommended flow:
+## Architecture
 
-推荐流程：
+The frontend never accesses the file system or database directly. It calls typed wrappers in `src/api/tauri.ts`, which invoke Rust commands in `src-tauri/src/commands.rs`.
 
-1. Create a local fixture folder outside the repository.
-1. 在仓库外创建一个本地测试素材文件夹。
-2. Add sample files such as `icon.png`, `music.wav`, `video.mp4`, `font.ttf`, `model.glb`, and `hero.skel`.
-2. 放入示例文件，例如 `icon.png`、`music.wav`、`video.mp4`、`font.ttf`、`model.glb` 和 `hero.skel`。
-3. Add the fixture folder in the app.
-3. 在应用中添加该素材文件夹。
-4. Run scan.
-4. 执行扫描。
-5. Confirm assets appear in the grid.
-5. 确认资源出现在网格中。
-6. Confirm image thumbnails render.
-6. 确认图片缩略图正常显示。
-7. Confirm search, filters, tags, favorites, and file actions work.
-7. 确认搜索、筛选、标签、收藏和文件操作可用。
-8. Confirm source files are not modified.
-8. 确认源文件没有被修改。
+Rust owns local capabilities:
 
-## Data Storage
+- folder picking and folder management
+- scanning and incremental indexing
+- thumbnail generation
+- SQLite migrations and repositories
+- search/filter query construction
+- safe OS actions: open file, reveal folder, copy path
 
-- 数据存储：
+SQLite and thumbnails are stored in the Tauri app data directory. Source asset folders remain untouched.
 
-- SQLite database: Tauri app data directory, `data.sqlite`.
-- SQLite 数据库：Tauri 应用数据目录中的 `data.sqlite`。
-- Thumbnail cache: Tauri app data directory, `thumbnails/`.
-- 缩略图缓存：Tauri 应用数据目录中的 `thumbnails/`。
-- Original files remain in their source folders.
-- 原始文件保留在源文件夹中。
+More details:
+
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)
+- [MODULE_MAP.md](MODULE_MAP.md)
+
+## Safety Boundaries
+
+This project manages user-owned local asset folders. Keep these rules intact:
+
+- Do not delete source asset files.
+- Do not move source asset files.
+- Do not rename source asset files.
+- Do not modify source asset contents.
+- Do not write thumbnails, caches, databases, or metadata into source asset folders.
+- Missing files are marked as missing in SQLite instead of being removed from disk.
+- Removing a library folder removes app index records only; it does not remove the source directory.
 
 ## Current Limitations
 
-- 当前限制：
+- The app is focused on Windows desktop.
+- Search results are capped at 2,000 rows.
+- Very large libraries may eventually need pagination, virtualized grids, and SQLite FTS.
+- Thumbnail generation is decoupled from indexing failures, but image-heavy folders can still make scans take time.
+- PSD, Spine, 3D, audio, and video files are indexed and shown with useful placeholders, but the app does not provide full runtime previews for those formats.
+- Godot `res://` path derivation is optional and only works when an explicit project root is provided.
+- The app does not include cloud sync, team accounts, AI auto-tagging, atlas processing, SVN integration, delete, batch move, or batch rename.
 
-- Thumbnail generation runs inside the scan command and may take time for large image folders.
-- 缩略图生成仍在扫描命令中执行，大型图片文件夹可能耗时较长。
-- Scan database writes are transactional, but very large folders may create large transactions.
-- 扫描写库是事务化的，但超大文件夹可能产生较大的事务。
-- Folder input currently accepts a typed absolute path instead of a polished directory picker workflow.
-- 当前文件夹输入使用手动填写绝对路径，还不是完整的目录选择器流程。
-- No SVN or version-control integration.
-- 暂不支持 SVN 或版本控制集成。
-- No AI tagging.
-- 暂不支持 AI 标签。
-- No delete, batch move, or batch rename support.
-- 不支持删除、批量移动或批量重命名。
-- Release artifact names must be checked before publishing. A v0.2.0 release directory containing a `0.1.0` installer name is considered a release-blocking mismatch.
-- Database and thumbnail cache paths are shown for transparency, but v0.2 does not support moving or migrating them from the UI.
-- Search results are capped at 2,000 rows in v0.2. Very large libraries may need pagination, virtualized grids, and SQLite FTS in a future release.
+## Contributing
+
+This is an early local-first desktop project. Before changing behavior, preserve the source-file safety boundary and run the relevant checks:
+
+- Frontend or TypeScript changes: `npm test` and `npm run build`
+- Rust backend changes: `cargo test` and `cargo check` in `src-tauri`
+- Scan, thumbnail, path, or file-action changes: also follow [tests/smoke/README.md](tests/smoke/README.md)
 
 ## License
 
