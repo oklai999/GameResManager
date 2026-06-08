@@ -240,3 +240,7 @@ Recommended flow:
 - Release artifact names must be checked before publishing. A v0.2.0 release directory containing a `0.1.0` installer name is considered a release-blocking mismatch.
 - Database and thumbnail cache paths are shown for transparency, but v0.2 does not support moving or migrating them from the UI.
 - Search results are capped at 2,000 rows in v0.2. Very large libraries may need pagination, virtualized grids, and SQLite FTS in a future release.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
