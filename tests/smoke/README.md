@@ -162,3 +162,29 @@ Use a fixture folder with the newly covered formats.
 - Confirm the app does not generate an invalid `res://...` path.
 - Confirm `打开文件` and `打开所在目录` still work.
 - Confirm no source file is deleted, moved, renamed, or modified.
+
+---
+
+## Advanced Capability Gate Smoke Review
+
+- Confirm the app does not show AI auto-tagging actions in the main workbench.
+- Confirm the app does not show batch delete, batch move, or batch rename actions.
+- Confirm the app does not show texture atlas export actions.
+- Confirm the app does not require network access for search, preview, tags, favorites, collections, notes, recent activity, or path copying.
+- Confirm non-previewable 3D, Spine, PSD, audio, and video files still show safe actions: open file, open containing folder, and copy path.
+- Confirm no source file is deleted, moved, renamed, modified, or written to during this review.
+
+---
+
+## Advanced Filters And Sorting Smoke Test
+
+- Scan or choose a library containing at least three assets with different file sizes.
+- Set a minimum file size and confirm smaller assets disappear from the grid.
+- Set a maximum file size and confirm larger assets disappear from the grid.
+- Use width or height filters on image assets and confirm assets without matching dimensions are hidden.
+- Set a modified-date range and confirm only assets inside the range remain visible.
+- Sort by name ascending and confirm card order follows file name.
+- Sort by size descending and confirm larger files appear before smaller files.
+- Sort by modified time descending and confirm recently modified files appear first.
+- Clear advanced filters and confirm the full filtered result set returns.
+- Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.

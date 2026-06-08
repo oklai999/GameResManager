@@ -45,13 +45,35 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
     if req.collection_id.is_some() { conditions.push("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)".to_string()); }
     if req.is_favorite.is_some() { conditions.push("is_favorite = ?".to_string()); }
     if req.is_missing.is_some() { conditions.push("is_missing = ?".to_string()); }
+    if req.min_file_size.is_some() { conditions.push("file_size >= ?".to_string()); }
+    if req.max_file_size.is_some() { conditions.push("file_size <= ?".to_string()); }
+    if req.min_width.is_some() { conditions.push("width >= ?".to_string()); }
+    if req.max_width.is_some() { conditions.push("width <= ?".to_string()); }
+    if req.min_height.is_some() { conditions.push("height >= ?".to_string()); }
+    if req.max_height.is_some() { conditions.push("height <= ?".to_string()); }
+    if req.modified_after.is_some() { conditions.push("modified_at >= ?".to_string()); }
+    if req.modified_before.is_some() { conditions.push("modified_at <= ?".to_string()); }
 
     if !conditions.is_empty() {
         sql.push_str(" WHERE ");
         sql.push_str(&conditions.join(" AND "));
     }
 
-    sql.push_str(" ORDER BY file_name LIMIT ? OFFSET ?");
+    let sort_column = match req.sort_by.as_str() {
+        "file_size" => "file_size",
+        "modified_at" => "modified_at",
+        "asset_type" => "asset_type",
+        _ => "file_name",
+    };
+    let sort_direction = if req.sort_direction.eq_ignore_ascii_case("desc") {
+        "DESC"
+    } else {
+        "ASC"
+    };
+    sql.push_str(&format!(
+        " ORDER BY {} {}, file_name ASC LIMIT ? OFFSET ?",
+        sort_column, sort_direction
+    ));
 
     let mut query = sqlx::query_as::<_, Asset>(&sql);
     let escaped = escape_like_pattern(&req.query);
@@ -69,6 +91,14 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
     if let Some(id) = req.collection_id { query = query.bind(id); }
     if let Some(v) = req.is_favorite { query = query.bind(if v { 1 } else { 0 }); }
     if let Some(v) = req.is_missing { query = query.bind(if v { 1 } else { 0 }); }
+    if let Some(v) = req.min_file_size { query = query.bind(v); }
+    if let Some(v) = req.max_file_size { query = query.bind(v); }
+    if let Some(v) = req.min_width { query = query.bind(v); }
+    if let Some(v) = req.max_width { query = query.bind(v); }
+    if let Some(v) = req.min_height { query = query.bind(v); }
+    if let Some(v) = req.max_height { query = query.bind(v); }
+    if let Some(ref v) = req.modified_after { query = query.bind(v); }
+    if let Some(ref v) = req.modified_before { query = query.bind(v); }
 
     let limit = req.limit.clamp(1, 2000);
     let offset = req.offset.max(0);
@@ -94,6 +124,16 @@ mod tests {
             collection_id: None,
             is_favorite: None,
             is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         }
@@ -304,6 +344,16 @@ mod tests {
             collection_id: None,
             is_favorite: None,
             is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         };
@@ -322,6 +372,16 @@ mod tests {
             collection_id: None,
             is_favorite: None,
             is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         };
@@ -356,6 +416,16 @@ mod tests {
             collection_id: None,
             is_favorite: None,
             is_missing: Some(true),
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         };
@@ -374,6 +444,16 @@ mod tests {
             collection_id: Some(1),
             is_favorite: None,
             is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         };
@@ -393,6 +473,16 @@ mod tests {
             collection_id: Some(1),
             is_favorite: None,
             is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         };
@@ -411,11 +501,142 @@ mod tests {
             collection_id: None,
             is_favorite: None,
             is_missing: Some(true),
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
             limit: 200,
             offset: 0,
         };
         let results = search_assets(&pool, &req).await.unwrap();
         assert!(!results.iter().any(|a| a.file_name.starts_with("._")));
         assert!(!results.iter().any(|a| a.absolute_path.contains("__MACOSX")));
+    }
+
+    async fn search_test_pool() -> SqlitePool {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id)
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE collection_assets (
+                collection_id INTEGER NOT NULL,
+                asset_id INTEGER NOT NULL,
+                PRIMARY KEY (collection_id, asset_id)
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO assets
+            (id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size, modified_at, width, height, note, created_at, updated_at)
+            VALUES
+            (1, 1, '/test/small.png', 'small.png', 'png', 'image', 100, '2024-01-01T00:00:00Z', 32, 32, '', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, 1, '/test/mid.png', 'mid.png', 'png', 'image', 500, '2024-01-03T00:00:00Z', 128, 128, '', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (3, 1, '/test/large.png', 'large.png', 'png', 'image', 2000, '2024-01-06T00:00:00Z', 2048, 2048, '', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn filters_by_file_size_dimensions_and_modified_time() {
+        let pool = search_test_pool().await;
+
+        let mut req = empty_request();
+        req.min_file_size = Some(200);
+        req.max_file_size = Some(900);
+        req.min_width = Some(64);
+        req.max_width = Some(512);
+        req.min_height = Some(64);
+        req.max_height = Some(512);
+        req.modified_after = Some("2024-01-02T00:00:00Z".to_string());
+        req.modified_before = Some("2024-01-05T00:00:00Z".to_string());
+
+        let results = search_assets(&pool, &req).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file_name, "mid.png");
+    }
+
+    #[tokio::test]
+    async fn sorts_by_size_descending() {
+        let pool = search_test_pool().await;
+
+        let mut req = empty_request();
+        req.sort_by = "file_size".to_string();
+        req.sort_direction = "desc".to_string();
+
+        let results = search_assets(&pool, &req).await.unwrap();
+        let names: Vec<String> = results.into_iter().map(|asset| asset.file_name).collect();
+
+        assert_eq!(names, vec!["large.png", "mid.png", "small.png"]);
+    }
+
+    #[tokio::test]
+    async fn invalid_sort_values_fall_back_to_file_name_ascending() {
+        let pool = search_test_pool().await;
+
+        let mut req = empty_request();
+        req.sort_by = "absolute_path; DROP TABLE assets".to_string();
+        req.sort_direction = "sideways".to_string();
+
+        let results = search_assets(&pool, &req).await.unwrap();
+        let names: Vec<String> = results.into_iter().map(|asset| asset.file_name).collect();
+
+        assert_eq!(names, vec!["large.png", "mid.png", "small.png"]);
     }
 }

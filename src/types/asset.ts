@@ -55,6 +55,26 @@ export type ScanJob = {
   error_message: string | null;
 };
 
+export type AssetSortBy = "file_name" | "file_size" | "modified_at" | "asset_type";
+
+export type SortDirection = "asc" | "desc";
+
+export type AssetSearchFilters = {
+  min_file_size: number | null;
+  max_file_size: number | null;
+  min_width: number | null;
+  max_width: number | null;
+  min_height: number | null;
+  max_height: number | null;
+  modified_after: string | null;
+  modified_before: string | null;
+};
+
+export type AssetSearchSort = {
+  sort_by: AssetSortBy;
+  sort_direction: SortDirection;
+};
+
 export type AssetSearchRequest = {
   query: string;
   search_file_name: boolean;
@@ -66,6 +86,16 @@ export type AssetSearchRequest = {
   collection_id: number | null;
   is_favorite: boolean | null;
   is_missing: boolean | null;
+  min_file_size: number | null;
+  max_file_size: number | null;
+  min_width: number | null;
+  max_width: number | null;
+  min_height: number | null;
+  max_height: number | null;
+  modified_after: string | null;
+  modified_before: string | null;
+  sort_by: AssetSortBy;
+  sort_direction: SortDirection;
   limit: number;
   offset: number;
 };

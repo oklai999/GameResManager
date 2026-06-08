@@ -34,9 +34,25 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
 import { SearchToolbar } from "./components/SearchToolbar";
 import { ToastProvider, useToast } from "./components/ToastHost";
-import type { Asset, AssetSearchRequest, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
+import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
 
 const SEARCH_RESULT_LIMIT = 2000;
+
+const DEFAULT_SEARCH_FILTERS: AssetSearchFilters = {
+  min_file_size: null,
+  max_file_size: null,
+  min_width: null,
+  max_width: null,
+  min_height: null,
+  max_height: null,
+  modified_after: null,
+  modified_before: null,
+};
+
+const DEFAULT_SEARCH_SORT: AssetSearchSort = {
+  sort_by: "file_name",
+  sort_direction: "asc",
+};
 
 async function fetchLatestJobs(folderList: LibraryFolder[]) {
   const jobs: Record<number, ScanJob | null> = {};
@@ -58,6 +74,8 @@ function AppInner() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>({ fileName: true, tag: true, note: true, path: false });
+  const [filters, setFilters] = useState<AssetSearchFilters>(DEFAULT_SEARCH_FILTERS);
+  const [sort, setSort] = useState<AssetSearchSort>(DEFAULT_SEARCH_SORT);
   const [latestJobs, setLatestJobs] = useState<Record<number, ScanJob | null>>({});
   const [scanSettings, setScanSettings] = useState<ScanSettings | null>(null);
   const { showToast } = useToast();
@@ -190,6 +208,16 @@ function AppInner() {
     }
   }, [showError]);
 
+  const handleFiltersChange = useCallback((next: AssetSearchFilters) => {
+    setFilters(next);
+    setSelectedIds([]);
+  }, []);
+
+  const handleSortChange = useCallback((next: AssetSearchSort) => {
+    setSort(next);
+    setSelectedIds([]);
+  }, []);
+
   const executeSearch = useCallback(async () => {
     const version = ++searchVersionRef.current;
     try {
@@ -205,6 +233,16 @@ function AppInner() {
         collection_id: selectedCollectionId,
         is_favorite: activeFilter === "favorites" ? true : null,
         is_missing: activeFilter === "missing" ? true : null,
+        min_file_size: filters.min_file_size,
+        max_file_size: filters.max_file_size,
+        min_width: filters.min_width,
+        max_width: filters.max_width,
+        min_height: filters.min_height,
+        max_height: filters.max_height,
+        modified_after: filters.modified_after,
+        modified_before: filters.modified_before,
+        sort_by: sort.sort_by,
+        sort_direction: sort.sort_direction,
         limit: SEARCH_RESULT_LIMIT,
         offset: 0,
       };
@@ -228,7 +266,7 @@ function AppInner() {
       if (version !== searchVersionRef.current) return;
       showError(e);
     }
-  }, [query, scope, activeFilter, selectedFolderId, selectedCollectionId, assets, showError]);
+  }, [query, scope, activeFilter, selectedFolderId, selectedCollectionId, assets, showError, filters, sort]);
 
   useEffect(() => {
     executeSearch();
@@ -408,7 +446,13 @@ function AppInner() {
   const isEmptySearch = displayAssets.length === 0;
   const hasFolders = folders.length > 0;
   const hasScanned = hasFolders && assets.length > 0;
-  const showSearchEmpty = query.trim() !== "" || activeFilter !== "all" || selectedFolderId != null || selectedCollectionId != null;
+  const hasAdvancedFilters = Object.values(filters).some((value) => value != null);
+  const showSearchEmpty =
+    query.trim() !== "" ||
+    activeFilter !== "all" ||
+    selectedFolderId != null ||
+    selectedCollectionId != null ||
+    hasAdvancedFilters;
 
   return (
     <main className="app-shell">
@@ -437,7 +481,16 @@ function AppInner() {
         }
       />
       <section className="workspace">
-        <SearchToolbar query={query} scope={scope} onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }} onScopeChange={(s) => { setScope(s); setSelectedIds([]); }} />
+        <SearchToolbar
+          query={query}
+          scope={scope}
+          filters={filters}
+          sort={sort}
+          onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }}
+          onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
+          onFiltersChange={handleFiltersChange}
+          onSortChange={handleSortChange}
+        />
         {scanMessage && (
           <div className="scan-summary" onClick={() => setScanMessage(null)}>
             {scanMessage}
@@ -450,7 +503,7 @@ function AppInner() {
           ))}
         {!hasFolders ? (
           <EmptyState variant="no-folders" />
-        ) : isEmptySearch && hasScanned ? (
+        ) : isEmptySearch && (hasScanned || showSearchEmpty) ? (
           <EmptyState variant="no-results" />
         ) : !hasScanned ? (
           <EmptyState variant="no-assets" />
