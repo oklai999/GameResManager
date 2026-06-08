@@ -82,6 +82,7 @@ pub fn run() {
             commands::get_scan_settings,
             commands::save_scan_settings,
             commands::search_assets,
+            commands::search_assets_page,
             commands::open_library_folder,
             commands::get_folder_asset_counts,
             commands::record_recent_asset_action,

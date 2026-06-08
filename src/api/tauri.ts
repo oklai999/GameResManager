@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Asset, AssetPathVariants, AssetSearchRequest, Collection, FolderAssetCounts, LibraryFolder, RecentAssetAction, ScanJob, ScanSettings, Tag } from "../types/asset";
+import type { Asset, AssetPathVariants, AssetSearchRequest, AssetSearchResponse, Collection, FolderAssetCounts, LibraryFolder, RecentAssetAction, ScanJob, ScanSettings, Tag } from "../types/asset";
 
 export async function listAssets(): Promise<Asset[]> {
   return invoke<Asset[]>("list_assets");
@@ -79,6 +79,10 @@ export async function saveScanSettings(settings: ScanSettings): Promise<void> {
 
 export async function searchAssets(req: AssetSearchRequest): Promise<Asset[]> {
   return invoke<Asset[]>("search_assets", { req });
+}
+
+export async function searchAssetsPage(req: AssetSearchRequest): Promise<AssetSearchResponse> {
+  return invoke<AssetSearchResponse>("search_assets_page", { req });
 }
 
 export async function listCollections(): Promise<Collection[]> {

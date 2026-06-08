@@ -208,8 +208,7 @@ This project manages user-owned local asset folders. Keep these rules intact:
 ## Current Limitations
 
 - The app is focused on Windows desktop.
-- Search results are capped at 2,000 rows.
-- Very large libraries may eventually need pagination, virtualized grids, and SQLite FTS.
+- Search results are loaded in pages; very large libraries may still need full grid virtualization and SQLite FTS.
 - Thumbnail generation is decoupled from indexing failures, but image-heavy folders can still make scans take time.
 - PSD, Spine, 3D, audio, and video files are indexed and shown with useful placeholders, but the app does not provide full runtime previews for those formats.
 - Godot `res://` path derivation is optional and only works when an explicit project root is provided.

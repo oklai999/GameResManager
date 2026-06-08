@@ -188,3 +188,15 @@ Use a fixture folder with the newly covered formats.
 - Sort by modified time descending and confirm recently modified files appear first.
 - Clear advanced filters and confirm the full filtered result set returns.
 - Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
+
+---
+
+## Large Library Pagination Smoke Test
+
+- Scan or choose a library with more than 250 indexed assets.
+- Confirm the first page appears without waiting for all matching assets to render.
+- Confirm the footer shows `已显示 200 / 总数` or the current page size equivalent.
+- Click `加载更多` and confirm additional cards append without clearing selection unexpectedly.
+- Change a search query, filter, or sort option and confirm results reset to the first page.
+- Confirm favorite, tag, collection, details, open file, open folder, and copy path still work on loaded pages.
+- Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.

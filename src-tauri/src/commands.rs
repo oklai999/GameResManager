@@ -306,6 +306,14 @@ pub async fn search_assets(
 }
 
 #[tauri::command]
+pub async fn search_assets_page(
+    db: State<'_, SqlitePool>,
+    req: crate::models::AssetSearchRequest,
+) -> Result<crate::models::AssetSearchResponse, CommandError> {
+    search::search_assets_page(&*db, &req).await.map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn delete_library_folder(
     db: State<'_, SqlitePool>,
     folder_id: i64,

@@ -13,3 +13,6 @@ indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false
+
+[src-tauri/migrations/*.sql]
+end_of_line = lf

@@ -21,7 +21,7 @@ import {
   recordRecentAssetAction,
   revealAssetInFolder,
   saveScanSettings,
-  searchAssets,
+  searchAssetsPage,
   setAssetFavorite,
   startScan,
   updateAssetNote,
@@ -36,7 +36,7 @@ import { SearchToolbar } from "./components/SearchToolbar";
 import { ToastProvider, useToast } from "./components/ToastHost";
 import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
 
-const SEARCH_RESULT_LIMIT = 2000;
+const SEARCH_PAGE_SIZE = 200;
 
 const DEFAULT_SEARCH_FILTERS: AssetSearchFilters = {
   min_file_size: null,
@@ -83,6 +83,9 @@ function AppInner() {
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [gridAssets, setGridAssets] = useState<Asset[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
   const [recentAssetIds, setRecentAssetIds] = useState<number[]>([]);
   const [recentTags, setRecentTags] = useState<string[]>([]);
@@ -218,35 +221,41 @@ function AppInner() {
     setSelectedIds([]);
   }, []);
 
+  const buildSearchRequest = useCallback((offset: number): AssetSearchRequest => {
+    const normalizedQuery = query.trim();
+    return {
+      query: normalizedQuery,
+      search_file_name: scope.fileName,
+      search_note: scope.note,
+      search_path: scope.path,
+      search_tags: scope.tag,
+      asset_type: ["all", "favorites", "missing", "recent"].includes(activeFilter) ? null : activeFilter,
+      library_folder_id: selectedFolderId,
+      collection_id: selectedCollectionId,
+      is_favorite: activeFilter === "favorites" ? true : null,
+      is_missing: activeFilter === "missing" ? true : null,
+      min_file_size: filters.min_file_size,
+      max_file_size: filters.max_file_size,
+      min_width: filters.min_width,
+      max_width: filters.max_width,
+      min_height: filters.min_height,
+      max_height: filters.max_height,
+      modified_after: filters.modified_after,
+      modified_before: filters.modified_before,
+      sort_by: sort.sort_by,
+      sort_direction: sort.sort_direction,
+      limit: SEARCH_PAGE_SIZE,
+      offset,
+    };
+  }, [query, scope, activeFilter, selectedFolderId, selectedCollectionId, filters, sort]);
+
   const executeSearch = useCallback(async () => {
     const version = ++searchVersionRef.current;
+    setIsSearching(true);
+    setIsLoadingMore(false);
     try {
-      const normalizedQuery = query.trim();
-      const req: AssetSearchRequest = {
-        query: normalizedQuery,
-        search_file_name: scope.fileName,
-        search_note: scope.note,
-        search_path: scope.path,
-        search_tags: scope.tag,
-        asset_type: ["all", "favorites", "missing", "recent"].includes(activeFilter) ? null : activeFilter,
-        library_folder_id: selectedFolderId,
-        collection_id: selectedCollectionId,
-        is_favorite: activeFilter === "favorites" ? true : null,
-        is_missing: activeFilter === "missing" ? true : null,
-        min_file_size: filters.min_file_size,
-        max_file_size: filters.max_file_size,
-        min_width: filters.min_width,
-        max_width: filters.max_width,
-        min_height: filters.min_height,
-        max_height: filters.max_height,
-        modified_after: filters.modified_after,
-        modified_before: filters.modified_before,
-        sort_by: sort.sort_by,
-        sort_direction: sort.sort_direction,
-        limit: SEARCH_RESULT_LIMIT,
-        offset: 0,
-      };
-      let results = await searchAssets(req);
+      const req = buildSearchRequest(0);
+      const page = await searchAssetsPage(req);
       if (version !== searchVersionRef.current) return;
 
       const tagMap = new Map<number, string[]>();
@@ -255,18 +264,54 @@ function AppInner() {
           tagMap.set(asset.id, asset.tags);
         }
       }
-      results = results.map((a) => ({
+      const results = page.assets.map((a) => ({
         ...a,
         tags: tagMap.get(a.id) ?? [],
       }));
       if (version !== searchVersionRef.current) return;
 
       setGridAssets(results);
+      setTotalCount(page.total_count);
     } catch (e) {
       if (version !== searchVersionRef.current) return;
       showError(e);
+    } finally {
+      if (version === searchVersionRef.current) {
+        setIsSearching(false);
+      }
     }
-  }, [query, scope, activeFilter, selectedFolderId, selectedCollectionId, assets, showError, filters, sort]);
+  }, [buildSearchRequest, assets, showError]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (isSearching || isLoadingMore || gridAssets.length >= totalCount) return;
+    const version = searchVersionRef.current;
+    setIsLoadingMore(true);
+    try {
+      const req = buildSearchRequest(gridAssets.length);
+      const page = await searchAssetsPage(req);
+      if (version !== searchVersionRef.current) return;
+
+      const tagMap = new Map<number, string[]>();
+      for (const asset of assets) {
+        if (asset.tags && asset.tags.length > 0) {
+          tagMap.set(asset.id, asset.tags);
+        }
+      }
+      const nextAssets = page.assets.map((a) => ({
+        ...a,
+        tags: tagMap.get(a.id) ?? [],
+      }));
+      setGridAssets((prev) => [...prev, ...nextAssets]);
+      setTotalCount(page.total_count);
+    } catch (e) {
+      if (version !== searchVersionRef.current) return;
+      showError(e);
+    } finally {
+      if (version === searchVersionRef.current) {
+        setIsLoadingMore(false);
+      }
+    }
+  }, [isSearching, isLoadingMore, gridAssets.length, totalCount, buildSearchRequest, assets, showError]);
 
   useEffect(() => {
     executeSearch();
@@ -274,9 +319,11 @@ function AppInner() {
 
   const displayAssets = activeFilter === "recent"
     ? recentAssetIds
-        .map((id) => gridAssets.find((a) => a.id === id))
+        .map((id) => assets.find((a) => a.id === id))
         .filter(Boolean) as Asset[]
     : gridAssets;
+  const displayedTotalCount = activeFilter === "recent" ? displayAssets.length : totalCount;
+  const canLoadMore = activeFilter !== "recent" && displayAssets.length < totalCount;
 
   const selectedAssets = selectedIds
     .map((id) => {
@@ -508,12 +555,28 @@ function AppInner() {
         ) : !hasScanned ? (
           <EmptyState variant="no-assets" />
         ) : (
-          <AssetGrid
-            assets={displayAssets}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            onToggleFavorite={handleToggleFavorite}
-          />
+          <>
+            <AssetGrid
+              assets={displayAssets}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              onToggleFavorite={handleToggleFavorite}
+            />
+            {displayAssets.length > 0 && (
+              <div className="result-footer">
+                <span>已显示 {displayAssets.length} / {displayedTotalCount}</span>
+                {canLoadMore && (
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    disabled={isSearching || isLoadingMore}
+                  >
+                    {isLoadingMore ? "加载中..." : "加载更多"}
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
       <DetailsPanel

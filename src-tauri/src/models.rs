@@ -182,3 +182,11 @@ pub struct AssetSearchRequest {
     pub offset: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetSearchResponse {
+    pub assets: Vec<Asset>,
+    pub total_count: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+

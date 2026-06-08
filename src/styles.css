@@ -676,6 +676,31 @@ body {
   text-align: center;
 }
 
+.result-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 0 4px;
+  color: #8f9bb3;
+  font-size: 13px;
+}
+
+.result-footer button {
+  height: 32px;
+  border: 1px solid #2d3447;
+  border-radius: 6px;
+  background: #1d2431;
+  color: #dce5f5;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.result-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .empty-state-icon {
   font-size: 36px;
   margin-bottom: 12px;

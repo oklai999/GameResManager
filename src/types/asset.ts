@@ -100,6 +100,13 @@ export type AssetSearchRequest = {
   offset: number;
 };
 
+export type AssetSearchResponse = {
+  assets: Asset[];
+  total_count: number;
+  limit: number;
+  offset: number;
+};
+
 export type RecentAssetAction = {
   id: number;
   asset_id: number;

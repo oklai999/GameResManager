@@ -108,6 +108,93 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
     Ok(rows)
 }
 
+pub async fn count_search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow::Result<i64> {
+    let mut sql = String::from("SELECT COUNT(*) FROM assets");
+
+    let mut conditions: Vec<String> = Vec::new();
+    let mut has_query = false;
+    conditions.push(exclude_system_metadata_condition());
+
+    if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
+        let mut ors: Vec<String> = Vec::new();
+        if req.search_file_name { ors.push("file_name LIKE ? ESCAPE '\\'".to_string()); }
+        if req.search_note { ors.push("note LIKE ? ESCAPE '\\'".to_string()); }
+        if req.search_path { ors.push("absolute_path LIKE ? ESCAPE '\\'".to_string()); }
+        if req.search_tags {
+            ors.push(
+                "EXISTS (SELECT 1 FROM asset_tags at JOIN tags t ON at.tag_id = t.id WHERE at.asset_id = assets.id AND t.name LIKE ? ESCAPE '\\')".to_string()
+            );
+        }
+        if !ors.is_empty() {
+            conditions.push(format!("({})", ors.join(" OR ")));
+            has_query = true;
+        }
+    }
+
+    if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
+    if req.library_folder_id.is_some() { conditions.push("library_folder_id = ?".to_string()); }
+    if req.collection_id.is_some() { conditions.push("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)".to_string()); }
+    if req.is_favorite.is_some() { conditions.push("is_favorite = ?".to_string()); }
+    if req.is_missing.is_some() { conditions.push("is_missing = ?".to_string()); }
+    if req.min_file_size.is_some() { conditions.push("file_size >= ?".to_string()); }
+    if req.max_file_size.is_some() { conditions.push("file_size <= ?".to_string()); }
+    if req.min_width.is_some() { conditions.push("width >= ?".to_string()); }
+    if req.max_width.is_some() { conditions.push("width <= ?".to_string()); }
+    if req.min_height.is_some() { conditions.push("height >= ?".to_string()); }
+    if req.max_height.is_some() { conditions.push("height <= ?".to_string()); }
+    if req.modified_after.is_some() { conditions.push("modified_at >= ?".to_string()); }
+    if req.modified_before.is_some() { conditions.push("modified_at <= ?".to_string()); }
+
+    if !conditions.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&conditions.join(" AND "));
+    }
+
+    let mut query = sqlx::query_scalar::<_, i64>(&sql);
+    let escaped = escape_like_pattern(&req.query);
+    let pattern = format!("%{}%", escaped);
+
+    if has_query {
+        if req.search_file_name { query = query.bind(&pattern); }
+        if req.search_note { query = query.bind(&pattern); }
+        if req.search_path { query = query.bind(&pattern); }
+        if req.search_tags { query = query.bind(&pattern); }
+    }
+
+    if let Some(ref t) = req.asset_type { query = query.bind(t); }
+    if let Some(id) = req.library_folder_id { query = query.bind(id); }
+    if let Some(id) = req.collection_id { query = query.bind(id); }
+    if let Some(v) = req.is_favorite { query = query.bind(if v { 1 } else { 0 }); }
+    if let Some(v) = req.is_missing { query = query.bind(if v { 1 } else { 0 }); }
+    if let Some(v) = req.min_file_size { query = query.bind(v); }
+    if let Some(v) = req.max_file_size { query = query.bind(v); }
+    if let Some(v) = req.min_width { query = query.bind(v); }
+    if let Some(v) = req.max_width { query = query.bind(v); }
+    if let Some(v) = req.min_height { query = query.bind(v); }
+    if let Some(v) = req.max_height { query = query.bind(v); }
+    if let Some(ref v) = req.modified_after { query = query.bind(v); }
+    if let Some(ref v) = req.modified_before { query = query.bind(v); }
+
+    let count = query.fetch_one(db).await?;
+    Ok(count)
+}
+
+pub async fn search_assets_page(
+    db: &SqlitePool,
+    req: &AssetSearchRequest,
+) -> anyhow::Result<crate::models::AssetSearchResponse> {
+    let assets = search_assets(db, req).await?;
+    let total_count = count_search_assets(db, req).await?;
+    let limit = req.limit.clamp(1, 2000);
+    let offset = req.offset.max(0);
+    Ok(crate::models::AssetSearchResponse {
+        assets,
+        total_count,
+        limit,
+        offset,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -638,5 +725,36 @@ mod tests {
         let names: Vec<String> = results.into_iter().map(|asset| asset.file_name).collect();
 
         assert_eq!(names, vec!["large.png", "mid.png", "small.png"]);
+    }
+
+    #[tokio::test]
+    async fn paged_search_returns_total_count() {
+        let pool = search_test_pool().await;
+        let mut req = empty_request();
+        req.limit = 2;
+        req.offset = 0;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.assets.len(), 2);
+        assert_eq!(page.total_count, 3);
+        assert_eq!(page.limit, 2);
+        assert_eq!(page.offset, 0);
+    }
+
+    #[tokio::test]
+    async fn paged_search_applies_same_filters_to_count() {
+        let pool = search_test_pool().await;
+        let mut req = empty_request();
+        req.min_file_size = Some(200);
+        req.max_file_size = Some(900);
+        req.limit = 20;
+        req.offset = 0;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.assets.len(), 1);
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "mid.png");
     }
 }

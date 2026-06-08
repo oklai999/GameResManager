@@ -54,12 +54,12 @@
 
 | Done | Task | Owner | Scope | Required Verification | Notes |
 |------|------|-------|-------|-----------------------|-------|
-| [ ] | Task 54 | Agent | Extend search contract types | `cargo check`; `npm run build` | Adds request fields only; no UI yet. |
-| [ ] | Task 55 | Agent | Implement backend range filters and sorting | `cargo test search`; `cargo check` | Uses bound parameters and whitelisted sort columns. |
-| [ ] | Task 56 | Agent | Add frontend filter/sort state types | `npm run build` | Keeps TypeScript contract aligned with Rust. |
-| [ ] | Task 57 | Agent | Add SearchToolbar filter and sort controls | `npm test -- src/components/SearchToolbar.test.tsx`; `npm run build` | Compact tool UI, no landing-page style. |
-| [ ] | Task 58 | Agent | Wire filters and sorting into App search | `npm test`; `npm run build` | Search request carries filters/sort to Tauri. |
-| [ ] | Task 59 | Agent | Add smoke QA and final verification | `npm test`; `npm run build`; `cargo test`; `cargo check` | Documentation and final checks. |
+| [x] | Task 54 | Agent | Extend search contract types | `cargo check`; `npm run build` | Adds request fields only; no UI yet. |
+| [x] | Task 55 | Agent | Implement backend range filters and sorting | `cargo test search`; `cargo check` | Uses bound parameters and whitelisted sort columns. |
+| [x] | Task 56 | Agent | Add frontend filter/sort state types | `npm run build` | Keeps TypeScript contract aligned with Rust. |
+| [x] | Task 57 | Agent | Add SearchToolbar filter and sort controls | `npm test -- src/components/SearchToolbar.test.tsx`; `npm run build` | Compact tool UI, no landing-page style. |
+| [x] | Task 58 | Agent | Wire filters and sorting into App search | `npm test`; `npm run build` | Search request carries filters/sort to Tauri. |
+| [x] | Task 59 | Agent | Add smoke QA and final verification | `npm test`; `npm run build`; `cargo test`; `cargo check` | Documentation and final checks. |
 
 ---
 
