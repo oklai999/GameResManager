@@ -335,6 +335,53 @@ mod tests {
         assert_eq!(page.total_count, 0);
     }
 
+    #[cfg(test)]
+    fn search_row_sql_for_test(req: &AssetSearchRequest) -> (String, SearchWhere) {
+        let mut sql = String::from(
+            "SELECT id, library_folder_id, absolute_path, file_name, extension,
+                    asset_type, file_size, modified_at, width, height,
+                    thumbnail_path, thumbnail_status, thumbnail_error, note,
+                    is_favorite, is_missing, created_at, updated_at
+             FROM assets"
+        );
+        let plan = build_search_where(req);
+        sql.push_str(&plan.sql());
+        sql.push_str(" ORDER BY file_name ASC, file_name ASC LIMIT ? OFFSET ?");
+        (sql, plan)
+    }
+
+    #[test]
+    fn query_plan_uses_trigram_for_three_character_term() {
+        let mut req = empty_request();
+        req.query = "背景树".to_string();
+        req.search_file_name = true;
+
+        let (sql, plan) = search_row_sql_for_test(&req);
+
+        assert!(sql.contains("asset_search_trigram_fts MATCH ?"));
+        assert!(!sql.contains("assets.file_name LIKE ?"));
+        assert!(matches!(
+            plan.binds.first(),
+            Some(SearchBind::Text(value)) if value.contains("背景树")
+        ));
+    }
+
+    #[test]
+    fn query_plan_limits_short_like_to_enabled_scope() {
+        let mut req = empty_request();
+        req.query = "待机".to_string();
+        req.search_file_name = false;
+        req.search_note = true;
+        req.search_path = false;
+        req.search_tags = false;
+
+        let (sql, _) = search_row_sql_for_test(&req);
+
+        assert!(sql.contains("assets.note LIKE ? ESCAPE"));
+        assert!(!sql.contains("assets.file_name LIKE ?"));
+        assert!(!sql.contains("assets.absolute_path LIKE ?"));
+    }
+
     #[test]
     fn escape_like_pattern_escapes_special_chars() {
         assert_eq!(escape_like_pattern("100%"), "100\\%");

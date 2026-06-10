@@ -228,3 +228,19 @@ Use a fixture folder with the newly covered formats.
 - For a Chinese note such as `主角待机`, search `主角` and confirm the asset appears (prefix match). Search `待机` and confirm it does **not** appear (arbitrary CJK substring search is not supported in v0.6.0).
 - Change type, size, dimension, modified-time, favorite, missing, folder, collection, and sort filters and confirm pagination count remains coherent.
 - Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
+
+---
+
+## v0.7.0 CJK Substring Search Smoke Test
+
+- Use a library containing an asset whose note is `主角待机动画`.
+- Search `待机` with only "备注" enabled and confirm the asset appears.
+- Search `背景树` for a file named `森林背景树.png` with only "文件名" enabled and confirm it appears.
+- Search `角色` with only "路径" enabled and confirm file-name/note/tag-only matches do not appear.
+- Search `主角 动画` and confirm every result matches both terms across enabled scopes.
+- Search literal `%`, `_`, `"`, `AND`, `OR`, and `NOT` text and confirm the app does not error.
+- On a library with at least 20,000 indexed assets, compare a three-character query and a two-character query. Confirm the UI stays responsive and record approximate result time in the test notes.
+- Edit a note and add a tag, then immediately search for a middle substring from each value.
+- Rescan the folder and confirm the same substring searches still work.
+- Remove a library folder from the app and confirm its former assets no longer appear in search; confirm source files remain on disk.
+- Confirm no source file is deleted, moved, renamed, modified, or written to.

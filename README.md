@@ -209,7 +209,7 @@ This project manages user-owned local asset folders. Keep these rules intact:
 
 - The app is focused on Windows desktop.
 - Search results are loaded in pages and the grid is virtualized; extremely large libraries may still need additional profiling and query tuning.
-- FTS keyword search uses prefix matching: searching `主角` matches `主角待机`, but `待机` does not match `主角待机`. Full substring search for CJK text requires a different tokenizer and is not yet supported.
+- CJK substring search uses SQLite trigram indexing for terms with at least three Unicode characters. One- and two-character terms use a scope-limited literal fallback and may be slower on extremely large libraries.
 - Thumbnail generation is decoupled from indexing failures, but image-heavy folders can still make scans take time.
 - PSD, Spine, 3D, audio, and video files are indexed and shown with useful placeholders, but the app does not provide full runtime previews for those formats.
 - Godot `res://` path derivation is optional and only works when an explicit project root is provided.
