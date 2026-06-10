@@ -10,7 +10,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 
 ## Status
 
-- Current version: `0.2.1`
+- Current version: `0.7.0`
 - Platform focus: Windows desktop
 - Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag efficiency, path variants, and advanced filters
 - License: MIT

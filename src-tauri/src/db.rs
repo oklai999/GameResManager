@@ -1245,6 +1245,9 @@ mod folder_management_tests {
         sqlx::query(
             "CREATE VIRTUAL TABLE asset_search_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'unicode61')"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'trigram')"
+        ).execute(&pool).await.unwrap();
         pool
     }
 
@@ -1306,6 +1309,8 @@ mod folder_management_tests {
         sqlx::query("INSERT INTO scan_jobs (id, library_folder_id, status, started_at) VALUES (1, 1, 'completed', '2024-01-01T00:00:00Z')")
             .execute(&db).await.unwrap();
         sqlx::query("INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES (1, 'a.png', '/test/a.png', '', '')")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO asset_search_trigram_fts (rowid, file_name, absolute_path, note, tags) VALUES (1, 'a.png', '/test/a.png', '', '')")
             .execute(&db).await.unwrap();
 
         let deleted = delete_library_folder(&db, 1).await.unwrap();
@@ -1753,6 +1758,14 @@ mod fts_tests {
         // Apply the real 0007 migration file
         let migration_0007 = std::fs::read_to_string("./migrations/0007_asset_search_fts.sql").unwrap();
         sqlx::raw_sql(&migration_0007).execute(&pool).await.unwrap();
+
+        // Also create trigram FTS table so production search can find assets
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'trigram')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_trigram_fts (rowid, file_name, absolute_path, note, tags) VALUES (1, 'hero.png', 'C:/assets/hero.png', '主角待机', '角色')"
+        ).execute(&pool).await.unwrap();
 
         // Verify FTS backfill via production search
         let req = crate::models::AssetSearchRequest {
