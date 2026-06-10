@@ -112,7 +112,7 @@ pub async fn set_asset_favorite(db: &Db, asset_id: i64, is_favorite: bool) -> an
     Ok(())
 }
 
-pub async fn create_or_get_tag(db: &Db, name: &str) -> anyhow::Result<i64> {
+async fn _create_or_get_tag(conn: &mut sqlx::SqliteConnection, name: &str) -> anyhow::Result<i64> {
     let normalized = normalize_tag_name(name);
     anyhow::ensure!(!normalized.is_empty(), "tag name cannot be empty");
     let now = Utc::now().to_rfc3339();
@@ -123,31 +123,39 @@ pub async fn create_or_get_tag(db: &Db, name: &str) -> anyhow::Result<i64> {
     .bind(&normalized)
     .bind(&now)
     .bind(&now)
-    .execute(db)
+    .execute(&mut *conn)
     .await?;
 
     sqlx::query("UPDATE tags SET last_used_at = ?1 WHERE name = ?2")
         .bind(&now)
         .bind(&normalized)
-        .execute(db)
+        .execute(&mut *conn)
         .await?;
 
     let id: (i64,) = sqlx::query_as("SELECT id FROM tags WHERE name = ?1")
         .bind(&normalized)
-        .fetch_one(db)
+        .fetch_one(&mut *conn)
         .await?;
     Ok(id.0)
 }
 
 pub async fn apply_tag_to_assets(db: &Db, tag_name: &str, asset_ids: &[i64]) -> anyhow::Result<()> {
-    let tag_id = create_or_get_tag(db, tag_name).await?;
+    if asset_ids.is_empty() {
+        return Ok(());
+    }
+    let mut tx = db.begin().await?;
+    let tag_id = _create_or_get_tag(&mut *tx, tag_name).await?;
     for asset_id in asset_ids {
         sqlx::query("INSERT OR IGNORE INTO asset_tags (asset_id, tag_id) VALUES (?1, ?2)")
             .bind(asset_id)
             .bind(tag_id)
-            .execute(db)
+            .execute(&mut *tx)
             .await?;
     }
+    for asset_id in asset_ids {
+        refresh_asset_search_document(&mut *tx, *asset_id).await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -193,10 +201,19 @@ pub async fn delete_library_folder(db: &Db, id: i64) -> anyhow::Result<bool> {
     if let Some(job) = running_scan_job_for_folder(db, id).await? {
         fail_scan_job(db, job.id, "folder deleted").await?;
     }
+
+    let mut tx = db.begin().await?;
+    sqlx::query("DELETE FROM asset_search_fts WHERE rowid IN (SELECT id FROM assets WHERE library_folder_id = ?1)")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
     let rows = sqlx::query("DELETE FROM library_folders WHERE id = ?1")
         .bind(id)
-        .execute(db)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(rows.rows_affected() > 0)
 }
 
@@ -680,14 +697,65 @@ pub async fn save_scan_settings(db: &Db, settings: &ScanSettings) -> anyhow::Res
     Ok(())
 }
 
+pub async fn refresh_asset_search_document(
+    conn: &mut sqlx::SqliteConnection,
+    asset_id: i64,
+) -> anyhow::Result<()> {
+    let asset = sqlx::query_as::<_, (i64, String, String, String)>(
+        "SELECT id, file_name, absolute_path, note FROM assets WHERE id = ?1"
+    )
+    .bind(asset_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    if let Some((id, file_name, absolute_path, note)) = asset {
+        let tags: Vec<String> = sqlx::query_scalar(
+            "SELECT tags.name
+             FROM tags
+             INNER JOIN asset_tags ON asset_tags.tag_id = tags.id
+             WHERE asset_tags.asset_id = ?1
+             ORDER BY tags.name",
+        )
+        .bind(asset_id)
+        .fetch_all(&mut *conn)
+        .await?;
+
+        sqlx::query("DELETE FROM asset_search_fts WHERE rowid = ?1")
+            .bind(asset_id)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query(
+            "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(id)
+        .bind(file_name)
+        .bind(absolute_path)
+        .bind(note)
+        .bind(tags.join(" "))
+        .execute(&mut *conn)
+        .await?;
+    } else {
+        sqlx::query("DELETE FROM asset_search_fts WHERE rowid = ?1")
+            .bind(asset_id)
+            .execute(&mut *conn)
+            .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn update_asset_note(db: &Db, asset_id: i64, note: &str) -> anyhow::Result<Asset> {
     let now = Utc::now().to_rfc3339();
+    let mut tx = db.begin().await?;
     sqlx::query("UPDATE assets SET note = ?1, updated_at = ?2 WHERE id = ?3")
         .bind(note)
         .bind(&now)
         .bind(asset_id)
-        .execute(db)
+        .execute(&mut *tx)
         .await?;
+
+    refresh_asset_search_document(&mut *tx, asset_id).await?;
 
     let row = sqlx::query_as::<_, Asset>(
         "SELECT id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size,
@@ -696,9 +764,10 @@ pub async fn update_asset_note(db: &Db, asset_id: i64, note: &str) -> anyhow::Re
          FROM assets WHERE id = ?1"
     )
     .bind(asset_id)
-    .fetch_one(db)
+    .fetch_one(&mut *tx)
     .await?;
 
+    tx.commit().await?;
     Ok(row)
 }
 
@@ -1122,6 +1191,9 @@ mod folder_management_tests {
                 FOREIGN KEY (library_folder_id) REFERENCES library_folders(id) ON DELETE CASCADE
             )"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'unicode61')"
+        ).execute(&pool).await.unwrap();
         pool
     }
 
@@ -1182,6 +1254,8 @@ mod folder_management_tests {
             .execute(&db).await.unwrap();
         sqlx::query("INSERT INTO scan_jobs (id, library_folder_id, status, started_at) VALUES (1, 1, 'completed', '2024-01-01T00:00:00Z')")
             .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES (1, 'a.png', '/test/a.png', '', '')")
+            .execute(&db).await.unwrap();
 
         let deleted = delete_library_folder(&db, 1).await.unwrap();
         assert!(deleted);
@@ -1205,6 +1279,10 @@ mod folder_management_tests {
         let scan_job_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scan_jobs WHERE library_folder_id = 1")
             .fetch_one(&db).await.unwrap();
         assert_eq!(scan_job_count.0, 0);
+
+        let fts_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_search_fts WHERE rowid = 1")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(fts_count.0, 0);
     }
 }
 
@@ -1343,10 +1421,354 @@ mod recent_tag_tests {
             .execute(&db).await.unwrap();
 
         // 复用旧标签，触发 last_used_at 刷新
-        create_or_get_tag(&db, "旧标签").await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+        _create_or_get_tag(&mut *conn, "旧标签").await.unwrap();
 
         let tags = list_recent_tags(&db, 10).await.unwrap();
         let names: Vec<String> = tags.into_iter().map(|tag| tag.name).collect();
         assert_eq!(names, vec!["旧标签", "新标签"]);
+    }
+}
+
+#[cfg(test)]
+mod fts_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE library_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_scanned_at TEXT,
+                is_enabled INTEGER NOT NULL DEFAULT 1
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id)
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'unicode61')"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    async fn insert_test_asset(db: &Db, folder_id: i64, path: &str) -> i64 {
+        let file_name = std::path::Path::new(path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        let extension = std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        let result = sqlx::query(
+            "INSERT INTO assets (library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        )
+        .bind(folder_id)
+        .bind(path)
+        .bind(file_name)
+        .bind(extension)
+        .execute(db).await.unwrap();
+        result.last_insert_rowid()
+    }
+
+    async fn create_test_library_folder(db: &Db, name: &str, path: &str) -> i64 {
+        let result = sqlx::query("INSERT INTO library_folders (name, path, created_at, is_enabled) VALUES (?1, ?2, '2024-01-01T00:00:00Z', 1)")
+            .bind(name)
+            .bind(path)
+            .execute(db).await.unwrap();
+        result.last_insert_rowid()
+    }
+
+    #[tokio::test]
+    async fn update_asset_note_triggers_fts_refresh() {
+        let db = setup_db().await;
+        let folder_id = create_test_library_folder(&db, "fixture", "C:/assets").await;
+        let asset_id = insert_test_asset(&db, folder_id, "C:/assets/hero_idle.png").await;
+
+        update_asset_note(&db, asset_id, "主角待整理").await.unwrap();
+
+        let row: (String, String, String, String) = sqlx::query_as(
+            "SELECT file_name, absolute_path, note, tags FROM asset_search_fts WHERE rowid = ?1",
+        )
+        .bind(asset_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+        assert_eq!(row.0, "hero_idle.png");
+        assert!(row.2.contains("主角"));
+    }
+
+    #[tokio::test]
+    async fn apply_tag_to_assets_triggers_fts_refresh() {
+        let db = setup_db().await;
+        let folder_id = create_test_library_folder(&db, "fixture", "C:/assets").await;
+        let asset_id = insert_test_asset(&db, folder_id, "C:/assets/hero_idle.png").await;
+
+        apply_tag_to_assets(&db, "角色", &[asset_id]).await.unwrap();
+
+        let row: (String, String, String, String) = sqlx::query_as(
+            "SELECT file_name, absolute_path, note, tags FROM asset_search_fts WHERE rowid = ?1",
+        )
+        .bind(asset_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+        assert_eq!(row.0, "hero_idle.png");
+        assert!(row.3.contains("角色"));
+    }
+
+    #[tokio::test]
+    async fn apply_tag_to_assets_rolls_back_tag_on_failure() {
+        let db = setup_db().await;
+        let folder_id = create_test_library_folder(&db, "fixture", "C:/assets").await;
+        let asset_id = insert_test_asset(&db, folder_id, "C:/assets/hero_idle.png").await;
+
+        // Pre-populate FTS so the table exists; then drop it to break refresh inside the tx.
+        refresh_asset_search_document(&mut *db.acquire().await.unwrap(), asset_id).await.unwrap();
+        sqlx::query("DROP TABLE asset_search_fts").execute(&db).await.unwrap();
+
+        let result = apply_tag_to_assets(&db, "新标签", &[asset_id]).await;
+        assert!(result.is_err(), "expected error when fts refresh fails");
+
+        let tag_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tags WHERE name = ?1")
+            .bind("新标签")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(tag_count.0, 0, "tag should not be committed when transaction rolls back");
+
+        let at_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_tags WHERE asset_id = ?1")
+            .bind(asset_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(at_count.0, 0, "asset_tags should not be committed when transaction rolls back");
+    }
+
+    #[tokio::test]
+    async fn update_asset_note_rolls_back_when_fts_refresh_fails() {
+        let db = setup_db().await;
+        let folder_id = create_test_library_folder(&db, "fixture", "C:/assets").await;
+        let asset_id = insert_test_asset(&db, folder_id, "C:/assets/hero_idle.png").await;
+
+        // Pre-populate FTS
+        refresh_asset_search_document(&mut *db.acquire().await.unwrap(), asset_id).await.unwrap();
+
+        // Break FTS to force refresh failure inside update_asset_note's transaction
+        sqlx::query("DROP TABLE asset_search_fts").execute(&db).await.unwrap();
+
+        let result = update_asset_note(&db, asset_id, "should not persist").await;
+        assert!(result.is_err(), "expected error when fts refresh fails");
+
+        let note: (String,) = sqlx::query_as("SELECT note FROM assets WHERE id = ?1")
+            .bind(asset_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(note.0, "", "note update should roll back when fts refresh fails");
+    }
+
+    async fn run_migrations_up_to(pool: &Db, target_version: i64) -> anyhow::Result<()> {
+        let migrations_dir = std::path::Path::new("./migrations");
+        let mut entries: Vec<_> = std::fs::read_dir(migrations_dir)?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name.ends_with(".sql")
+            })
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let version: i64 = name.split('_').next()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            if version > target_version {
+                continue;
+            }
+            let sql = std::fs::read_to_string(entry.path())?;
+            sqlx::raw_sql(&sql).execute(pool).await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn migration_0007_backfills_fts_from_existing_assets() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+
+        // Apply real migrations up to 0006
+        run_migrations_up_to(&pool, 6).await.unwrap();
+
+        // Insert existing data as if the app has been running on 0006
+        sqlx::query("INSERT INTO library_folders (id, name, path, created_at, is_enabled) VALUES (1, 'fixture', 'C:/assets', '2024-01-01T00:00:00Z', 1)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size, modified_at, note, created_at, updated_at) VALUES (1, 1, 'C:/assets/hero.png', 'hero.png', 'png', 'image', 1024, '2024-01-01T00:00:00Z', '主角待机', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO tags (id, name, color, created_at, last_used_at) VALUES (1, '角色', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO asset_tags (asset_id, tag_id) VALUES (1, 1)")
+            .execute(&pool).await.unwrap();
+
+        // Apply the real 0007 migration file
+        let migration_0007 = std::fs::read_to_string("./migrations/0007_asset_search_fts.sql").unwrap();
+        sqlx::raw_sql(&migration_0007).execute(&pool).await.unwrap();
+
+        // Verify FTS backfill via production search
+        let req = crate::models::AssetSearchRequest {
+            query: "hero".to_string(),
+            search_file_name: true,
+            search_note: false,
+            search_path: false,
+            search_tags: false,
+            asset_type: None,
+            library_folder_id: None,
+            collection_id: None,
+            is_favorite: None,
+            is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
+            limit: 200,
+            offset: 0,
+        };
+        let page = crate::search::search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Note prefix search
+        let mut req = req.clone();
+        req.query = "主角".to_string();
+        req.search_file_name = false;
+        req.search_note = true;
+        let page = crate::search::search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Tag search
+        let mut req = req.clone();
+        req.query = "角色".to_string();
+        req.search_note = false;
+        req.search_tags = true;
+        let page = crate::search::search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    #[tokio::test]
+    async fn migration_0008_backfills_trigram_fts_from_existing_assets() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+
+        run_migrations_up_to(&pool, 7).await.unwrap();
+        sqlx::query(
+            "INSERT INTO library_folders
+             (id, name, path, created_at, is_enabled)
+             VALUES (1, 'fixture', 'C:/assets', '2024-01-01T00:00:00Z', 1)"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO assets
+             (id, library_folder_id, absolute_path, file_name, extension, asset_type,
+              file_size, modified_at, note, created_at, updated_at)
+             VALUES
+             (1, 1, 'C:/assets/hero.png', 'hero.png', 'png', 'image',
+              1024, '2024-01-01T00:00:00Z', '主角待机动画',
+              '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO tags
+             (id, name, color, created_at, last_used_at)
+             VALUES
+             (1, '角色动画', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO asset_tags (asset_id, tag_id) VALUES (1, 1)")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let migration = std::fs::read_to_string("./migrations/0008_asset_search_trigram_fts.sql")
+            .unwrap();
+        sqlx::raw_sql(&migration).execute(&pool).await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT note, tags
+             FROM asset_search_trigram_fts
+             WHERE rowid = 1"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(row.0, "主角待机动画");
+        assert_eq!(row.1, "角色动画");
     }
 }
