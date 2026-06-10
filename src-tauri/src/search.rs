@@ -1,8 +1,52 @@
 use sqlx::SqlitePool;
 use crate::models::{Asset, AssetSearchRequest};
 
+#[allow(dead_code)]
 fn escape_like_pattern(input: &str) -> String {
     input.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
+fn build_fts_query(req: &AssetSearchRequest) -> Option<String> {
+    if req.query.is_empty() {
+        return None;
+    }
+
+    let terms: Vec<String> = req.query
+        .split_whitespace()
+        .map(|t| t.replace('"', "\"\""))
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    if terms.is_empty() {
+        return None;
+    }
+
+    let mut columns: Vec<&str> = Vec::new();
+    if req.search_file_name { columns.push("file_name"); }
+    if req.search_note { columns.push("note"); }
+    if req.search_path { columns.push("absolute_path"); }
+    if req.search_tags { columns.push("tags"); }
+
+    if columns.is_empty() {
+        return Some(String::new());
+    }
+
+    let term_exprs: Vec<String> = terms.iter().map(|term| {
+        if columns.len() == 4 {
+            format!("\"{}\"*", term)
+        } else {
+            let col_exprs: Vec<String> = columns.iter()
+                .map(|col| format!("{}:\"{}\"*", col, term))
+                .collect();
+            if col_exprs.len() == 1 {
+                col_exprs.into_iter().next().unwrap()
+            } else {
+                format!("({})", col_exprs.join(" OR "))
+            }
+        }
+    }).collect();
+
+    Some(term_exprs.join(" AND "))
 }
 
 fn exclude_system_metadata_condition() -> String {
@@ -21,23 +65,16 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
     );
 
     let mut conditions: Vec<String> = Vec::new();
-    let mut has_query = false;
     conditions.push(exclude_system_metadata_condition());
 
-    if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
-        let mut ors: Vec<String> = Vec::new();
-        if req.search_file_name { ors.push("file_name LIKE ? ESCAPE '\\'".to_string()); }
-        if req.search_note { ors.push("note LIKE ? ESCAPE '\\'".to_string()); }
-        if req.search_path { ors.push("absolute_path LIKE ? ESCAPE '\\'".to_string()); }
-        if req.search_tags {
-            ors.push(
-                "EXISTS (SELECT 1 FROM asset_tags at JOIN tags t ON at.tag_id = t.id WHERE at.asset_id = assets.id AND t.name LIKE ? ESCAPE '\\')".to_string()
-            );
-        }
-        if !ors.is_empty() {
-            conditions.push(format!("({})", ors.join(" OR ")));
-            has_query = true;
-        }
+    let fts_query = build_fts_query(req);
+    let has_fts = fts_query.as_ref().map_or(false, |q| !q.is_empty());
+    let force_zero = fts_query.as_ref().map_or(false, |q| q.is_empty());
+
+    if force_zero {
+        conditions.push("1 = 0".to_string());
+    } else if has_fts {
+        conditions.push("assets.id IN (SELECT rowid FROM asset_search_fts WHERE asset_search_fts MATCH ?)".to_string());
     }
 
     if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
@@ -76,14 +113,11 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
     ));
 
     let mut query = sqlx::query_as::<_, Asset>(&sql);
-    let escaped = escape_like_pattern(&req.query);
-    let pattern = format!("%{}%", escaped);
 
-    if has_query {
-        if req.search_file_name { query = query.bind(&pattern); }
-        if req.search_note { query = query.bind(&pattern); }
-        if req.search_path { query = query.bind(&pattern); }
-        if req.search_tags { query = query.bind(&pattern); }
+    if has_fts {
+        if let Some(ref fts) = fts_query {
+            query = query.bind(fts);
+        }
     }
 
     if let Some(ref t) = req.asset_type { query = query.bind(t); }
@@ -112,23 +146,16 @@ pub async fn count_search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> a
     let mut sql = String::from("SELECT COUNT(*) FROM assets");
 
     let mut conditions: Vec<String> = Vec::new();
-    let mut has_query = false;
     conditions.push(exclude_system_metadata_condition());
 
-    if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
-        let mut ors: Vec<String> = Vec::new();
-        if req.search_file_name { ors.push("file_name LIKE ? ESCAPE '\\'".to_string()); }
-        if req.search_note { ors.push("note LIKE ? ESCAPE '\\'".to_string()); }
-        if req.search_path { ors.push("absolute_path LIKE ? ESCAPE '\\'".to_string()); }
-        if req.search_tags {
-            ors.push(
-                "EXISTS (SELECT 1 FROM asset_tags at JOIN tags t ON at.tag_id = t.id WHERE at.asset_id = assets.id AND t.name LIKE ? ESCAPE '\\')".to_string()
-            );
-        }
-        if !ors.is_empty() {
-            conditions.push(format!("({})", ors.join(" OR ")));
-            has_query = true;
-        }
+    let fts_query = build_fts_query(req);
+    let has_fts = fts_query.as_ref().map_or(false, |q| !q.is_empty());
+    let force_zero = fts_query.as_ref().map_or(false, |q| q.is_empty());
+
+    if force_zero {
+        conditions.push("1 = 0".to_string());
+    } else if has_fts {
+        conditions.push("assets.id IN (SELECT rowid FROM asset_search_fts WHERE asset_search_fts MATCH ?)".to_string());
     }
 
     if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
@@ -151,14 +178,11 @@ pub async fn count_search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> a
     }
 
     let mut query = sqlx::query_scalar::<_, i64>(&sql);
-    let escaped = escape_like_pattern(&req.query);
-    let pattern = format!("%{}%", escaped);
 
-    if has_query {
-        if req.search_file_name { query = query.bind(&pattern); }
-        if req.search_note { query = query.bind(&pattern); }
-        if req.search_path { query = query.bind(&pattern); }
-        if req.search_tags { query = query.bind(&pattern); }
+    if has_fts {
+        if let Some(ref fts) = fts_query {
+            query = query.bind(fts);
+        }
     }
 
     if let Some(ref t) = req.asset_type { query = query.bind(t); }
@@ -227,101 +251,94 @@ mod tests {
     }
 
     #[test]
-    fn empty_query_returns_valid_sql() {
+    fn build_fts_query_returns_none_for_empty_query() {
         let req = empty_request();
-        let mut sql = String::from("SELECT * FROM assets");
-        let mut conditions: Vec<String> = Vec::new();
-
-        if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
-            let mut ors: Vec<String> = Vec::new();
-            if req.search_file_name { ors.push("file_name LIKE ?".to_string()); }
-            if req.search_note { ors.push("note LIKE ?".to_string()); }
-            if req.search_path { ors.push("absolute_path LIKE ?".to_string()); }
-            if req.search_tags { ors.push("EXISTS (SELECT 1 FROM asset_tags".to_string()); }
-            if !ors.is_empty() {
-                conditions.push(format!("({})", ors.join(" OR ")));
-            }
-        }
-
-        if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
-        if req.library_folder_id.is_some() { conditions.push("library_folder_id = ?".to_string()); }
-        if req.is_favorite.is_some() { conditions.push("is_favorite = ?".to_string()); }
-        if req.is_missing.is_some() { conditions.push("is_missing = ?".to_string()); }
-
-        if !conditions.is_empty() {
-            sql.push_str(" WHERE ");
-            sql.push_str(&conditions.join(" AND "));
-        }
-
-        assert!(sql.contains("SELECT * FROM assets"));
-        assert!(!sql.contains("WHERE"));
+        assert_eq!(build_fts_query(&req), None);
     }
 
     #[test]
-    fn filename_search_adds_filename_condition() {
+    fn build_fts_query_returns_empty_string_when_no_scopes() {
         let mut req = empty_request();
-        req.query = "icon".to_string();
+        req.query = "hero".to_string();
+        req.search_file_name = false;
+        assert_eq!(build_fts_query(&req), Some(String::new()));
+    }
+
+    #[test]
+    fn build_fts_query_splits_terms_and_joins_with_and() {
+        let mut req = empty_request();
+        req.query = "hero idle".to_string();
         req.search_file_name = true;
-
-        let mut conditions: Vec<String> = Vec::new();
-        if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
-            let mut ors: Vec<String> = Vec::new();
-            if req.search_file_name { ors.push("file_name LIKE ?".to_string()); }
-            if req.search_note { ors.push("note LIKE ?".to_string()); }
-            if req.search_path { ors.push("absolute_path LIKE ?".to_string()); }
-            if req.search_tags { ors.push("EXISTS (SELECT 1 FROM asset_tags".to_string()); }
-            if !ors.is_empty() {
-                conditions.push(format!("({})", ors.join(" OR ")));
-            }
-        }
-
-        assert_eq!(conditions.len(), 1);
-        assert!(conditions[0].contains("file_name LIKE ?"));
+        req.search_note = true;
+        req.search_path = true;
+        req.search_tags = true;
+        assert_eq!(build_fts_query(&req), Some("\"hero\"* AND \"idle\"*".to_string()));
     }
 
     #[test]
-    fn type_filter_adds_asset_type_condition() {
+    fn build_fts_query_escapes_double_quotes() {
         let mut req = empty_request();
-        req.asset_type = Some("image".to_string());
-
-        let mut conditions: Vec<String> = Vec::new();
-        if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
-
-        assert_eq!(conditions.len(), 1);
-        assert!(conditions[0].contains("asset_type = ?"));
+        req.query = "5\" sword".to_string();
+        req.search_file_name = true;
+        req.search_note = true;
+        req.search_path = true;
+        req.search_tags = true;
+        assert_eq!(build_fts_query(&req), Some("\"5\"\"\"* AND \"sword\"*".to_string()));
     }
 
     #[test]
-    fn combined_filters_preserve_parameter_order() {
+    fn build_fts_query_uses_prefix_match_for_all_columns() {
         let mut req = empty_request();
         req.query = "hero".to_string();
         req.search_file_name = true;
-        req.asset_type = Some("image".to_string());
-        req.is_favorite = Some(true);
+        req.search_note = true;
+        req.search_path = true;
+        req.search_tags = true;
+        assert_eq!(build_fts_query(&req), Some("\"hero\"*".to_string()));
+    }
 
-        let mut conditions: Vec<String> = Vec::new();
-        let mut has_query = false;
+    #[test]
+    fn build_fts_query_uses_column_scoped_prefix_match() {
+        let mut req = empty_request();
+        req.query = "hero".to_string();
+        req.search_file_name = true;
+        req.search_note = false;
+        req.search_path = false;
+        req.search_tags = true;
+        assert_eq!(
+            build_fts_query(&req),
+            Some("(file_name:\"hero\"* OR tags:\"hero\"*)".to_string())
+        );
+    }
 
-        if !req.query.is_empty() && (req.search_file_name || req.search_note || req.search_path || req.search_tags) {
-            let mut ors: Vec<String> = Vec::new();
-            if req.search_file_name { ors.push("file_name LIKE ?".to_string()); }
-            if req.search_note { ors.push("note LIKE ?".to_string()); }
-            if req.search_path { ors.push("absolute_path LIKE ?".to_string()); }
-            if req.search_tags { ors.push("EXISTS (SELECT 1 FROM asset_tags".to_string()); }
-            if !ors.is_empty() {
-                conditions.push(format!("({})", ors.join(" OR ")));
-                has_query = true;
-            }
-        }
+    #[test]
+    fn build_fts_query_single_scope_no_parens() {
+        let mut req = empty_request();
+        req.query = "hero".to_string();
+        req.search_file_name = false;
+        req.search_note = true;
+        req.search_path = false;
+        req.search_tags = false;
+        assert_eq!(build_fts_query(&req), Some("note:\"hero\"*".to_string()));
+    }
 
-        if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
-        if req.is_favorite.is_some() { conditions.push("is_favorite = ?".to_string()); }
+    #[test]
+    fn build_fts_query_filters_out_empty_terms() {
+        let mut req = empty_request();
+        req.query = "hero   ".to_string();
+        req.search_file_name = true;
+        req.search_note = true;
+        req.search_path = true;
+        req.search_tags = true;
+        assert_eq!(build_fts_query(&req), Some("\"hero\"*".to_string()));
+    }
 
-        assert_eq!(conditions.len(), 3);
-        assert!(conditions[0].contains("file_name"));
-        assert!(conditions[1].contains("asset_type"));
-        assert!(conditions[2].contains("is_favorite"));
-        assert!(has_query);
+    #[test]
+    fn build_fts_query_all_whitespace_returns_none() {
+        let mut req = empty_request();
+        req.query = "    ".to_string();
+        req.search_file_name = true;
+        assert_eq!(build_fts_query(&req), None);
     }
 
     #[test]
@@ -404,6 +421,11 @@ mod tests {
                 PRIMARY KEY (collection_id, asset_id)
             )"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'unicode61'
+            )"
+        ).execute(&pool).await.unwrap();
 
         sqlx::query("INSERT INTO library_folders (id, name, path, created_at, is_enabled) VALUES (1, 'Test', '/test', '2024-01-01T00:00:00Z', 1)")
             .execute(&pool).await.unwrap();
@@ -419,6 +441,13 @@ mod tests {
             .execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO collection_assets (collection_id, asset_id) VALUES (1, 1), (1, 3)")
             .execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/hero.png', 'main character', ''),
+            (2, 'villain.png', '/test/villain.png', '', 'important'),
+            (3, 'sound.wav', '/test/sound.wav', '', ''),
+            (4, '._hero.png', '/test/__MACOSX/._hero.png', '', '')"
+        ).execute(&pool).await.unwrap();
 
         let req = AssetSearchRequest {
             query: "hero".to_string(),
@@ -756,5 +785,419 @@ mod tests {
         assert_eq!(page.assets.len(), 1);
         assert_eq!(page.total_count, 1);
         assert_eq!(page.assets[0].file_name, "mid.png");
+    }
+
+    #[tokio::test]
+    async fn paged_search_uses_fts_for_tag_and_note_text() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'unicode61'
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, note, is_favorite, is_missing, created_at, updated_at) VALUES
+            (1, 1, '/test/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '主角待机', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, 1, '/test/tree.png', 'tree.png', 'png', 'image', '2024-01-01T00:00:00Z', '森林背景', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/hero.png', '主角待机', '角色'),
+            (2, 'tree.png', '/test/tree.png', '森林背景', '场景')"
+        ).execute(&pool).await.unwrap();
+
+        // Test complete-token match with Chinese text
+        let mut req = empty_request();
+        req.query = "主角待机".to_string();
+        req.search_note = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets.len(), 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Test tag search with Chinese text
+        let mut req = empty_request();
+        req.query = "角色".to_string();
+        req.search_tags = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets.len(), 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Test combined note + tag search across multiple terms
+        let mut req = empty_request();
+        req.query = "角色 主角待机".to_string();
+        req.search_note = true;
+        req.search_tags = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets.len(), 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Verify partial Chinese keyword matches via prefix query
+        let mut req = empty_request();
+        req.query = "主角".to_string();
+        req.search_note = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    async fn scoped_search_pool() -> SqlitePool {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id)
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'unicode61'
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, note, is_favorite, is_missing, created_at, updated_at) VALUES
+            (1, 1, '/test/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', 'main character', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, 1, '/test/villain.png', 'villain.png', 'png', 'image', '2024-01-01T00:00:00Z', '', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (3, 1, '/test/sound.wav', 'sound.wav', 'wav', 'audio', '2024-01-01T00:00:00Z', '', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO tags (id, name, color, created_at, last_used_at) VALUES (1, 'important', '#FF0000', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO asset_tags (asset_id, tag_id) VALUES (2, 1)")
+            .execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/hero.png', 'main character', ''),
+            (2, 'villain.png', '/test/villain.png', '', 'important'),
+            (3, 'sound.wav', '/test/sound.wav', '', '')"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn paged_search_with_no_scopes_returns_zero() {
+        let pool = scoped_search_pool().await;
+        let mut req = empty_request();
+        req.query = "hero".to_string();
+        req.search_file_name = false;
+        req.search_note = false;
+        req.search_path = false;
+        req.search_tags = false;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 0);
+        assert!(page.assets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paged_search_isolates_file_name_scope() {
+        let pool = scoped_search_pool().await;
+        let mut req = empty_request();
+        req.query = "hero".to_string();
+        req.search_file_name = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    #[tokio::test]
+    async fn paged_search_isolates_note_scope() {
+        let pool = scoped_search_pool().await;
+        let mut req = empty_request();
+        req.query = "main".to_string();
+        req.search_file_name = false;
+        req.search_note = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    #[tokio::test]
+    async fn paged_search_isolates_path_scope() {
+        let pool = scoped_search_pool().await;
+        let mut req = empty_request();
+        req.query = "villain".to_string();
+        req.search_file_name = false;
+        req.search_path = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "villain.png");
+    }
+
+    #[tokio::test]
+    async fn paged_search_isolates_tags_scope() {
+        let pool = scoped_search_pool().await;
+        let mut req = empty_request();
+        req.query = "important".to_string();
+        req.search_file_name = false;
+        req.search_tags = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "villain.png");
+    }
+
+    #[tokio::test]
+    async fn paged_search_fts_with_other_filters_preserves_row_count_consistency() {
+        let pool = scoped_search_pool().await;
+        let mut req = empty_request();
+        req.query = "png".to_string();
+        req.search_file_name = true;
+        req.asset_type = Some("image".to_string());
+        req.limit = 1;
+        req.offset = 0;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.assets.len(), 1);
+        assert_eq!(page.total_count, 2);
+        assert!(page.assets.iter().any(|a| a.file_name == "hero.png"));
+    }
+
+    #[tokio::test]
+    async fn paged_search_handles_risky_input_safely() {
+        let pool = scoped_search_pool().await;
+
+        // Double quotes inside term
+        let mut req = empty_request();
+        req.query = "5\" hero".to_string();
+        req.search_file_name = true;
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 0);
+
+        // FTS operators inside quotes should be literal
+        let mut req = empty_request();
+        req.query = "AND OR NOT".to_string();
+        req.search_file_name = true;
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 0);
+
+        // Punctuation should not cause errors
+        let mut req = empty_request();
+        req.query = "hero.png!@#".to_string();
+        req.search_file_name = true;
+        let page = search_assets_page(&pool, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    async fn cjk_search_pool() -> SqlitePool {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id)
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'unicode61'
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'trigram'
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, note, is_favorite, is_missing, created_at, updated_at) VALUES
+            (1, 1, '/test/角色/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '主角待机动画', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, 1, '/test/场景/tree.png', '森林背景树.png', 'png', 'image', '2024-01-01T00:00:00Z', '白天场景', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO tags (id, name, color, created_at, last_used_at) VALUES
+            (1, '角色', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (2, '动画', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (3, '场景', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+            (4, '背景', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_tags (asset_id, tag_id) VALUES (1, 1), (1, 2), (2, 3), (2, 4)"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/角色/hero.png', '主角待机动画', '角色 动画'),
+            (2, '森林背景树.png', '/test/场景/tree.png', '白天场景', '场景 背景')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_trigram_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/角色/hero.png', '主角待机动画', '角色 动画'),
+            (2, '森林背景树.png', '/test/场景/tree.png', '白天场景', '场景 背景')"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn cjk_substring_matches_middle_of_note() {
+        let pool = cjk_search_pool().await;
+        let mut req = empty_request();
+        req.query = "待机".to_string();
+        req.search_file_name = false;
+        req.search_note = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    #[tokio::test]
+    async fn cjk_substring_matches_middle_of_file_name() {
+        let pool = cjk_search_pool().await;
+        let mut req = empty_request();
+        req.query = "背景树".to_string();
+        req.search_file_name = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "森林背景树.png");
+    }
+
+    #[tokio::test]
+    async fn cjk_substring_respects_selected_scope() {
+        let pool = cjk_search_pool().await;
+        let mut req = empty_request();
+        req.query = "角色".to_string();
+        req.search_file_name = true;
+        req.search_path = false;
+        req.search_note = false;
+        req.search_tags = false;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.total_count, 0);
+    }
+
+    #[tokio::test]
+    async fn multiple_substring_terms_use_and_semantics() {
+        let pool = cjk_search_pool().await;
+        let mut req = empty_request();
+        req.query = "主角 动画".to_string();
+        req.search_file_name = false;
+        req.search_note = true;
+        req.search_tags = true;
+
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
     }
 }
