@@ -203,10 +203,18 @@ pub async fn delete_library_folder(db: &Db, id: i64) -> anyhow::Result<bool> {
     }
 
     let mut tx = db.begin().await?;
-    sqlx::query("DELETE FROM asset_search_fts WHERE rowid IN (SELECT id FROM assets WHERE library_folder_id = ?1)")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+    for table in [PREFIX_FTS_TABLE, TRIGRAM_FTS_TABLE] {
+        let sql = format!(
+            "DELETE FROM {table}
+             WHERE rowid IN (
+               SELECT id FROM assets WHERE library_folder_id = ?1
+             )"
+        );
+        sqlx::query(&sql)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
 
     let rows = sqlx::query("DELETE FROM library_folders WHERE id = ?1")
         .bind(id)
@@ -697,6 +705,40 @@ pub async fn save_scan_settings(db: &Db, settings: &ScanSettings) -> anyhow::Res
     Ok(())
 }
 
+const PREFIX_FTS_TABLE: &str = "asset_search_fts";
+const TRIGRAM_FTS_TABLE: &str = "asset_search_trigram_fts";
+
+async fn replace_search_document(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+    id: i64,
+    file_name: &str,
+    absolute_path: &str,
+    note: &str,
+    tags: &str,
+) -> anyhow::Result<()> {
+    let delete_sql = format!("DELETE FROM {table} WHERE rowid = ?1");
+    sqlx::query(&delete_sql)
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+
+    let insert_sql = format!(
+        "INSERT INTO {table} (rowid, file_name, absolute_path, note, tags)
+         VALUES (?1, ?2, ?3, ?4, ?5)"
+    );
+    sqlx::query(&insert_sql)
+        .bind(id)
+        .bind(file_name)
+        .bind(absolute_path)
+        .bind(note)
+        .bind(tags)
+        .execute(&mut *conn)
+        .await?;
+
+    Ok(())
+}
+
 pub async fn refresh_asset_search_document(
     conn: &mut sqlx::SqliteConnection,
     asset_id: i64,
@@ -719,27 +761,36 @@ pub async fn refresh_asset_search_document(
         .bind(asset_id)
         .fetch_all(&mut *conn)
         .await?;
+        let tags = tags.join(" ");
 
-        sqlx::query("DELETE FROM asset_search_fts WHERE rowid = ?1")
-            .bind(asset_id)
-            .execute(&mut *conn)
-            .await?;
-        sqlx::query(
-            "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+        replace_search_document(
+            conn,
+            PREFIX_FTS_TABLE,
+            id,
+            &file_name,
+            &absolute_path,
+            &note,
+            &tags,
         )
-        .bind(id)
-        .bind(file_name)
-        .bind(absolute_path)
-        .bind(note)
-        .bind(tags.join(" "))
-        .execute(&mut *conn)
+        .await?;
+        replace_search_document(
+            conn,
+            TRIGRAM_FTS_TABLE,
+            id,
+            &file_name,
+            &absolute_path,
+            &note,
+            &tags,
+        )
         .await?;
     } else {
-        sqlx::query("DELETE FROM asset_search_fts WHERE rowid = ?1")
-            .bind(asset_id)
-            .execute(&mut *conn)
-            .await?;
+        for table in [PREFIX_FTS_TABLE, TRIGRAM_FTS_TABLE] {
+            let sql = format!("DELETE FROM {table} WHERE rowid = ?1");
+            sqlx::query(&sql)
+                .bind(asset_id)
+                .execute(&mut *conn)
+                .await?;
+        }
     }
 
     Ok(())
@@ -1491,6 +1542,9 @@ mod fts_tests {
         sqlx::query(
             "CREATE VIRTUAL TABLE asset_search_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'unicode61')"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'trigram')"
+        ).execute(&pool).await.unwrap();
         pool
     }
 
@@ -1589,6 +1643,42 @@ mod fts_tests {
             .await
             .unwrap();
         assert_eq!(at_count.0, 0, "asset_tags should not be committed when transaction rolls back");
+    }
+
+    #[tokio::test]
+    async fn update_asset_note_refreshes_trigram_fts() {
+        let db = setup_db().await;
+        let folder_id = create_test_library_folder(&db, "fixture", "C:/assets").await;
+        let asset_id = insert_test_asset(&db, folder_id, "C:/assets/hero_idle.png").await;
+
+        update_asset_note(&db, asset_id, "主角待机动画").await.unwrap();
+
+        let note: String = sqlx::query_scalar(
+            "SELECT note FROM asset_search_trigram_fts WHERE rowid = ?1"
+        )
+        .bind(asset_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(note, "主角待机动画");
+    }
+
+    #[tokio::test]
+    async fn apply_tag_refreshes_trigram_fts() {
+        let db = setup_db().await;
+        let folder_id = create_test_library_folder(&db, "fixture", "C:/assets").await;
+        let asset_id = insert_test_asset(&db, folder_id, "C:/assets/hero_idle.png").await;
+
+        apply_tag_to_assets(&db, "角色动画", &[asset_id]).await.unwrap();
+
+        let tags: String = sqlx::query_scalar(
+            "SELECT tags FROM asset_search_trigram_fts WHERE rowid = ?1"
+        )
+        .bind(asset_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(tags, "角色动画");
     }
 
     #[tokio::test]

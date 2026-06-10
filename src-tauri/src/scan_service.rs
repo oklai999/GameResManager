@@ -109,6 +109,7 @@ async fn persist_batch(
     counters: &mut ScanCounters,
 ) -> anyhow::Result<()> {
     let mut tx = db_pool.begin().await?;
+    let mut modified_paths: Vec<&str> = Vec::new();
 
     for asset in batch {
         sqlx::query(
@@ -218,10 +219,68 @@ async fn persist_batch(
             } else {
                 counters.added += 1;
             }
+            modified_paths.push(&asset.absolute_path);
+        }
+    }
+
+    if !modified_paths.is_empty() {
+        let placeholders: Vec<String> = modified_paths.iter().map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "SELECT id FROM assets WHERE absolute_path IN ({})",
+            placeholders.join(",")
+        );
+        let mut query = sqlx::query_as::<_, (i64,)>(&sql);
+        for path in &modified_paths {
+            query = query.bind(*path);
+        }
+        let rows = query.fetch_all(&mut *tx).await?;
+        let ids: Vec<i64> = rows.into_iter().map(|r| r.0).collect();
+
+        if !ids.is_empty() {
+            let id_placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+
+            for table in ["asset_search_fts", "asset_search_trigram_fts"] {
+                let delete_sql = format!(
+                    "DELETE FROM {table} WHERE rowid IN ({})",
+                    id_placeholders.join(",")
+                );
+                let mut delete_query = sqlx::query(&delete_sql);
+                for id in &ids {
+                    delete_query = delete_query.bind(*id);
+                }
+                delete_query.execute(&mut *tx).await?;
+
+                let insert_sql = format!(
+                    "INSERT INTO {table} (rowid, file_name, absolute_path, note, tags)
+                     SELECT a.id, a.file_name, a.absolute_path, a.note,
+                            COALESCE(
+                              (
+                                SELECT group_concat(t.name, ' ')
+                                FROM (
+                                  SELECT t2.name
+                                  FROM tags t2
+                                  INNER JOIN asset_tags at ON at.tag_id = t2.id
+                                  WHERE at.asset_id = a.id
+                                  ORDER BY t2.name
+                                ) t
+                              ),
+                              ''
+                            )
+                     FROM assets a
+                     WHERE a.id IN ({})",
+                    id_placeholders.join(",")
+                );
+                let mut insert_query = sqlx::query(&insert_sql);
+                for id in &ids {
+                    insert_query = insert_query.bind(*id);
+                }
+                insert_query.execute(&mut *tx).await?;
+            }
         }
     }
 
     tx.commit().await?;
+
     counters.found += batch.len();
     Ok(())
 }
@@ -1101,6 +1160,135 @@ mod tests {
         let assets = crate::db::list_assets(&db, 1000, 0).await.unwrap();
         assert_eq!(assets[0].thumbnail_path, first_thumb, "thumbnail_path should be preserved");
         assert_eq!(assets[0].thumbnail_status, first_status, "thumbnail_status should be preserved");
+    }
+
+    #[tokio::test]
+    async fn scan_populates_fts_and_search_finds_assets() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+        write_file(asset_dir, "hero.png", b"fake");
+
+        let job = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job.id).await.unwrap();
+
+        let req = crate::models::AssetSearchRequest {
+            query: "hero".to_string(),
+            search_file_name: true,
+            search_note: false,
+            search_path: false,
+            search_tags: false,
+            asset_type: None,
+            library_folder_id: None,
+            collection_id: None,
+            is_favorite: None,
+            is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
+            limit: 200,
+            offset: 0,
+        };
+        let page = crate::search::search_assets_page(&db, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets.len(), 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+    }
+
+    #[tokio::test]
+    async fn rescan_preserves_note_and_tag_in_fts() {
+        let (db, tmp) = setup_test_db().await;
+        let folder = create_test_folder(&db, &tmp, "assets").await;
+        let asset_dir = std::path::Path::new(&folder.path);
+        write_file(asset_dir, "hero.png", b"fake");
+
+        // First scan
+        let job1 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job1.id).await.unwrap();
+
+        let asset = crate::db::list_assets(&db, 1000, 0).await.unwrap().remove(0);
+        let asset_id = asset.id;
+
+        // Add Chinese note and tag via production APIs
+        crate::db::update_asset_note(&db, asset_id, "主角待机").await.unwrap();
+        crate::db::apply_tag_to_assets(&db, "角色", &[asset_id]).await.unwrap();
+
+        // Modify file content so the next scan takes the upsert (modified) path
+        write_file(asset_dir, "hero.png", b"updated_content");
+
+        // Second scan
+        let job2 = crate::db::create_scan_job(&db, folder.id).await.unwrap();
+        run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job2.id).await.unwrap();
+
+        let job2 = crate::db::latest_scan_job_for_folder(&db, folder.id).await.unwrap().unwrap();
+        assert_eq!(job2.updated_count, 1, "second scan should update the changed file");
+
+        // Search by note prefix via production search
+        let req = crate::models::AssetSearchRequest {
+            query: "主角".to_string(),
+            search_file_name: false,
+            search_note: true,
+            search_path: false,
+            search_tags: false,
+            asset_type: None,
+            library_folder_id: None,
+            collection_id: None,
+            is_favorite: None,
+            is_missing: None,
+            min_file_size: None,
+            max_file_size: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            modified_after: None,
+            modified_before: None,
+            sort_by: "file_name".to_string(),
+            sort_direction: "asc".to_string(),
+            limit: 200,
+            offset: 0,
+        };
+        let page = crate::search::search_assets_page(&db, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Search by tag via production search
+        let mut req = req.clone();
+        req.query = "角色".to_string();
+        req.search_note = false;
+        req.search_tags = true;
+        let page = crate::search::search_assets_page(&db, &req).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.assets[0].file_name, "hero.png");
+
+        // Directly assert FTS row still holds note and tags
+        let row: (String, String, String, String) = sqlx::query_as(
+            "SELECT file_name, absolute_path, note, tags FROM asset_search_fts WHERE rowid = ?1",
+        )
+        .bind(asset_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(row.2, "主角待机");
+        assert_eq!(row.3, "角色");
+
+        // Directly assert trigram FTS row holds the same note and tags
+        let row: (String, String, String, String) = sqlx::query_as(
+            "SELECT file_name, absolute_path, note, tags FROM asset_search_trigram_fts WHERE rowid = ?1",
+        )
+        .bind(asset_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(row.2, "主角待机");
+        assert_eq!(row.3, "角色");
     }
 
 }
