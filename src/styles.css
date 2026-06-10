@@ -96,6 +96,18 @@ body {
   flex-wrap: wrap;
 }
 
+.search-query-group {
+  display: grid;
+  gap: 4px;
+  min-width: min(420px, 100%);
+}
+
+.search-hint {
+  color: #7f899d;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .advanced-filter-row {
   display: flex;
   align-items: end;

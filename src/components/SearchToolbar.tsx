@@ -72,14 +72,19 @@ export function SearchToolbar({
 
   return (
     <header className="search-toolbar">
-      <div className="search-input-wrap">
-        <Search className="search-input-icon" size={16} aria-hidden="true" />
-        <input
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="搜索资源..."
-          aria-label="搜索资源"
-        />
+      <div className="search-query-group">
+        <div className="search-input-wrap">
+          <Search className="search-input-icon" size={16} aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="搜索资源..."
+            aria-label="搜索资源"
+          />
+        </div>
+        <span className="search-hint">
+          支持中文片段；空格分隔的关键词需同时匹配
+        </span>
       </div>
       <div className="scope-segments" aria-label="搜索范围">
         {scopeItems.map(({ key, label }) => (

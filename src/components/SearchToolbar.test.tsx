@@ -132,4 +132,23 @@ describe("SearchToolbar", () => {
 
     expect(onFiltersChange).toHaveBeenCalledWith(filters);
   });
+
+  it("explains literal substring search behavior", () => {
+    render(
+      <SearchToolbar
+        query=""
+        scope={scope}
+        filters={filters}
+        sort={sort}
+        onQueryChange={vi.fn()}
+        onScopeChange={vi.fn()}
+        onFiltersChange={vi.fn()}
+        onSortChange={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByText("支持中文片段；空格分隔的关键词需同时匹配")
+    ).toBeInTheDocument();
+  });
 });
