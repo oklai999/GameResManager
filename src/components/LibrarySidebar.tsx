@@ -13,6 +13,7 @@ import {
   RotateCw,
   Trash2,
   Type,
+  X,
 } from "lucide-react";
 import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob } from "../types/asset";
 
@@ -53,6 +54,7 @@ export function LibrarySidebar({
   onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, isScanning, latestJobs, folderCounts, settingsPanel,
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
+  const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
   const filters = [
     { id: "all", label: "全部资源", icon: List },
     { id: "recent", label: "最近使用", icon: RotateCw },
@@ -72,6 +74,12 @@ export function LibrarySidebar({
     if (name) {
       onCreateCollection(name);
       setCollectionName("");
+    }
+  };
+
+  const confirmRemoveFolderIndex = (folder: LibraryFolder) => {
+    if (window.confirm(`确定要从资源库移除「${folder.name}」的索引吗？这只会删除应用内索引和关联整理数据，不会删除磁盘上的原始文件。`)) {
+      onDeleteFolder(folder.id);
     }
   };
 
@@ -97,7 +105,17 @@ export function LibrarySidebar({
         })}
       </nav>
 
-      <div className="panel-heading secondary">素材文件夹</div>
+      <div className="panel-heading secondary folder-section-heading">
+        <span>素材文件夹</span>
+        <button
+          type="button"
+          className="folder-manager-open-btn"
+          onClick={() => setIsFolderManagerOpen(true)}
+          aria-label="管理文件夹"
+        >
+          管理
+        </button>
+      </div>
       <div className="folder-form">
         <button onClick={onPickFolder} className="nav-item" style={{ width: "100%" }}>
           <Plus size={15} aria-hidden="true" />
@@ -154,9 +172,7 @@ export function LibrarySidebar({
                     className="delete-folder-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`确定要从资源库移除「${folder.name}」的索引吗？这只会删除应用内索引和关联整理数据，不会删除磁盘上的原始文件。`)) {
-                        onDeleteFolder(folder.id);
-                      }
+                      confirmRemoveFolderIndex(folder);
                     }}
                     title="从资源库移除索引"
                     disabled={isRunning}
@@ -175,6 +191,100 @@ export function LibrarySidebar({
           );
         })}
       </div>
+
+      {isFolderManagerOpen && (
+        <div className="folder-manager-backdrop" role="presentation">
+          <section
+            className="folder-manager-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="资源库文件夹管理"
+          >
+            <div className="folder-manager-header">
+              <div>
+                <h2>资源库文件夹管理</h2>
+                <p>备份工程前，可以在这里移除应用内索引。不会删除、移动或修改磁盘上的原始文件。</p>
+              </div>
+              <button
+                type="button"
+                className="folder-manager-close-btn"
+                onClick={() => setIsFolderManagerOpen(false)}
+                aria-label="关闭文件夹管理"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            {folders.length === 0 ? (
+              <div className="folder-manager-empty">还没有添加素材文件夹。</div>
+            ) : (
+              <div className="folder-manager-list">
+                {folders.map((folder) => {
+                  const job = latestJobs[folder.id];
+                  const isRunning = job?.status === "running";
+                  const counts = folderCounts[folder.id];
+                  return (
+                    <article className="folder-manager-item" key={folder.id}>
+                      <div className="folder-manager-info">
+                        <div className="folder-manager-name">
+                          <Folder size={15} aria-hidden="true" />
+                          <span>{folder.name}</span>
+                        </div>
+                        <div className="folder-manager-path">{folder.path}</div>
+                        <div className="folder-manager-meta">
+                          {counts ? `${counts.total} 个资源` : "0 个资源"}
+                          {counts && counts.missing > 0 ? ` · ${counts.missing} 个缺失` : ""}
+                          {counts && !counts.is_accessible ? " · 路径不可访问" : ""}
+                          {folder.last_scanned_at ? ` · ${formatDateTime(folder.last_scanned_at)}` : " · 未扫描"}
+                        </div>
+                        {isRunning && (
+                          <div className="folder-manager-warning">扫描中，先取消扫描后再移除索引</div>
+                        )}
+                      </div>
+                      <div className="folder-manager-actions">
+                        <button
+                          type="button"
+                          className="open-folder-btn"
+                          onClick={() => onOpenFolder(folder)}
+                        >
+                          打开文件夹
+                        </button>
+                        {isRunning ? (
+                          <button
+                            type="button"
+                            className="scan-btn cancel"
+                            onClick={() => onCancelScan(job!.id)}
+                          >
+                            取消扫描
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="scan-btn"
+                            onClick={() => onScanFolder(folder.id)}
+                            disabled={isScanning}
+                          >
+                            扫描
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="remove-folder-index-btn"
+                          onClick={() => confirmRemoveFolderIndex(folder)}
+                          disabled={isRunning}
+                          aria-label={`从资源库移除 ${folder.name} 的索引`}
+                        >
+                          从资源库移除
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       <div className="panel-heading secondary">集合</div>
       <form className="folder-form" onSubmit={handleCreateCollection}>

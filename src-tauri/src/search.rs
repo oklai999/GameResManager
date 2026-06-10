@@ -6,47 +6,49 @@ fn escape_like_pattern(input: &str) -> String {
     input.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
-fn build_fts_query(req: &AssetSearchRequest) -> Option<String> {
-    if req.query.is_empty() {
-        return None;
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum KeywordTerm {
+    Trigram(String),
+    ShortLike(String),
+}
 
-    let terms: Vec<String> = req.query
+fn classify_terms(input: &str) -> Vec<KeywordTerm> {
+    input
         .split_whitespace()
-        .map(|t| t.replace('"', "\"\""))
-        .filter(|t| !t.is_empty())
-        .collect();
-
-    if terms.is_empty() {
-        return None;
-    }
-
-    let mut columns: Vec<&str> = Vec::new();
-    if req.search_file_name { columns.push("file_name"); }
-    if req.search_note { columns.push("note"); }
-    if req.search_path { columns.push("absolute_path"); }
-    if req.search_tags { columns.push("tags"); }
-
-    if columns.is_empty() {
-        return Some(String::new());
-    }
-
-    let term_exprs: Vec<String> = terms.iter().map(|term| {
-        if columns.len() == 4 {
-            format!("\"{}\"*", term)
-        } else {
-            let col_exprs: Vec<String> = columns.iter()
-                .map(|col| format!("{}:\"{}\"*", col, term))
-                .collect();
-            if col_exprs.len() == 1 {
-                col_exprs.into_iter().next().unwrap()
+        .filter(|term| !term.is_empty())
+        .map(|term| {
+            if term.chars().count() >= 3 {
+                KeywordTerm::Trigram(term.to_string())
             } else {
-                format!("({})", col_exprs.join(" OR "))
+                KeywordTerm::ShortLike(format!(
+                    "%{}%",
+                    escape_like_pattern(term)
+                ))
             }
-        }
-    }).collect();
+        })
+        .collect()
+}
 
-    Some(term_exprs.join(" AND "))
+#[derive(Debug, Clone)]
+enum SearchBind {
+    Text(String),
+    Integer(i64),
+}
+
+#[derive(Debug, Default)]
+struct SearchWhere {
+    conditions: Vec<String>,
+    binds: Vec<SearchBind>,
+}
+
+impl SearchWhere {
+    fn sql(&self) -> String {
+        if self.conditions.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", self.conditions.join(" AND "))
+        }
+    }
 }
 
 fn exclude_system_metadata_condition() -> String {
@@ -54,6 +56,158 @@ fn exclude_system_metadata_condition() -> String {
      AND file_name NOT LIKE '._%' ESCAPE '\\'
      AND absolute_path NOT LIKE '%/__MACOSX/%' ESCAPE '\\'
      AND absolute_path NOT LIKE '%\\__MACOSX\\%' ESCAPE '\\'".to_string()
+}
+
+fn enabled_scopes(req: &AssetSearchRequest) -> Vec<&'static str> {
+    let mut scopes = Vec::new();
+    if req.search_file_name { scopes.push("file_name"); }
+    if req.search_path { scopes.push("absolute_path"); }
+    if req.search_note { scopes.push("note"); }
+    if req.search_tags { scopes.push("tags"); }
+    scopes
+}
+
+fn trigram_expression(term: &str, scopes: &[&str]) -> String {
+    let escaped = term.replace('"', "\"\"");
+    let pieces: Vec<String> = scopes
+        .iter()
+        .map(|scope| format!("{scope}:\"{escaped}\""))
+        .collect();
+    if pieces.len() == 1 {
+        pieces[0].clone()
+    } else {
+        format!("({})", pieces.join(" OR "))
+    }
+}
+
+fn push_keyword_conditions(
+    plan: &mut SearchWhere,
+    req: &AssetSearchRequest,
+) {
+    let terms = classify_terms(req.query.trim());
+    if terms.is_empty() {
+        return;
+    }
+
+    let scopes = enabled_scopes(req);
+    if scopes.is_empty() {
+        plan.conditions.push("1 = 0".to_string());
+        return;
+    }
+
+    for term in terms {
+        match term {
+            KeywordTerm::Trigram(value) => {
+                plan.conditions.push(
+                    "assets.id IN (
+                       SELECT rowid
+                       FROM asset_search_trigram_fts
+                       WHERE asset_search_trigram_fts MATCH ?
+                     )"
+                    .to_string(),
+                );
+                plan.binds.push(SearchBind::Text(
+                    trigram_expression(&value, &scopes)
+                ));
+            }
+            KeywordTerm::ShortLike(pattern) => {
+                let mut pieces = Vec::new();
+                for scope in &scopes {
+                    match *scope {
+                        "tags" => pieces.push(
+                            "EXISTS (
+                               SELECT 1
+                               FROM asset_tags
+                               INNER JOIN tags ON tags.id = asset_tags.tag_id
+                               WHERE asset_tags.asset_id = assets.id
+                                 AND tags.name LIKE ? ESCAPE '\\'
+                             )"
+                            .to_string(),
+                        ),
+                        column => pieces.push(format!(
+                            "assets.{column} LIKE ? ESCAPE '\\'"
+                        )),
+                    }
+                    plan.binds.push(SearchBind::Text(pattern.clone()));
+                }
+                plan.conditions.push(format!("({})", pieces.join(" OR ")));
+            }
+        }
+    }
+}
+
+fn build_search_where(req: &AssetSearchRequest) -> SearchWhere {
+    let mut plan = SearchWhere::default();
+    plan.conditions.push(exclude_system_metadata_condition());
+    push_keyword_conditions(&mut plan, req);
+
+    macro_rules! push_integer {
+        ($value:expr, $condition:expr) => {
+            if let Some(value) = $value {
+                plan.conditions.push($condition.to_string());
+                plan.binds.push(SearchBind::Integer(value));
+            }
+        };
+    }
+
+    if let Some(ref value) = req.asset_type {
+        plan.conditions.push("asset_type = ?".to_string());
+        plan.binds.push(SearchBind::Text(value.clone()));
+    }
+    push_integer!(req.library_folder_id, "library_folder_id = ?");
+    push_integer!(req.collection_id, "id IN (
+        SELECT asset_id FROM collection_assets WHERE collection_id = ?
+    )");
+    if let Some(value) = req.is_favorite {
+        plan.conditions.push("is_favorite = ?".to_string());
+        plan.binds.push(SearchBind::Integer(if value { 1 } else { 0 }));
+    }
+    if let Some(value) = req.is_missing {
+        plan.conditions.push("is_missing = ?".to_string());
+        plan.binds.push(SearchBind::Integer(if value { 1 } else { 0 }));
+    }
+    push_integer!(req.min_file_size, "file_size >= ?");
+    push_integer!(req.max_file_size, "file_size <= ?");
+    push_integer!(req.min_width, "width >= ?");
+    push_integer!(req.max_width, "width <= ?");
+    push_integer!(req.min_height, "height >= ?");
+    push_integer!(req.max_height, "height <= ?");
+    if let Some(ref value) = req.modified_after {
+        plan.conditions.push("modified_at >= ?".to_string());
+        plan.binds.push(SearchBind::Text(value.clone()));
+    }
+    if let Some(ref value) = req.modified_before {
+        plan.conditions.push("modified_at <= ?".to_string());
+        plan.binds.push(SearchBind::Text(value.clone()));
+    }
+
+    plan
+}
+
+fn bind_asset_query<'q>(
+    mut query: sqlx::query::QueryAs<'q, sqlx::Sqlite, Asset, sqlx::sqlite::SqliteArguments<'q>>,
+    binds: &'q [SearchBind],
+) -> sqlx::query::QueryAs<'q, sqlx::Sqlite, Asset, sqlx::sqlite::SqliteArguments<'q>> {
+    for bind in binds {
+        query = match bind {
+            SearchBind::Text(value) => query.bind(value),
+            SearchBind::Integer(value) => query.bind(*value),
+        };
+    }
+    query
+}
+
+fn bind_count_query<'q>(
+    mut query: sqlx::query::QueryScalar<'q, sqlx::Sqlite, i64, sqlx::sqlite::SqliteArguments<'q>>,
+    binds: &'q [SearchBind],
+) -> sqlx::query::QueryScalar<'q, sqlx::Sqlite, i64, sqlx::sqlite::SqliteArguments<'q>> {
+    for bind in binds {
+        query = match bind {
+            SearchBind::Text(value) => query.bind(value),
+            SearchBind::Integer(value) => query.bind(*value),
+        };
+    }
+    query
 }
 
 pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow::Result<Vec<Asset>> {
@@ -64,37 +218,8 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
          FROM assets"
     );
 
-    let mut conditions: Vec<String> = Vec::new();
-    conditions.push(exclude_system_metadata_condition());
-
-    let fts_query = build_fts_query(req);
-    let has_fts = fts_query.as_ref().map_or(false, |q| !q.is_empty());
-    let force_zero = fts_query.as_ref().map_or(false, |q| q.is_empty());
-
-    if force_zero {
-        conditions.push("1 = 0".to_string());
-    } else if has_fts {
-        conditions.push("assets.id IN (SELECT rowid FROM asset_search_fts WHERE asset_search_fts MATCH ?)".to_string());
-    }
-
-    if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
-    if req.library_folder_id.is_some() { conditions.push("library_folder_id = ?".to_string()); }
-    if req.collection_id.is_some() { conditions.push("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)".to_string()); }
-    if req.is_favorite.is_some() { conditions.push("is_favorite = ?".to_string()); }
-    if req.is_missing.is_some() { conditions.push("is_missing = ?".to_string()); }
-    if req.min_file_size.is_some() { conditions.push("file_size >= ?".to_string()); }
-    if req.max_file_size.is_some() { conditions.push("file_size <= ?".to_string()); }
-    if req.min_width.is_some() { conditions.push("width >= ?".to_string()); }
-    if req.max_width.is_some() { conditions.push("width <= ?".to_string()); }
-    if req.min_height.is_some() { conditions.push("height >= ?".to_string()); }
-    if req.max_height.is_some() { conditions.push("height <= ?".to_string()); }
-    if req.modified_after.is_some() { conditions.push("modified_at >= ?".to_string()); }
-    if req.modified_before.is_some() { conditions.push("modified_at <= ?".to_string()); }
-
-    if !conditions.is_empty() {
-        sql.push_str(" WHERE ");
-        sql.push_str(&conditions.join(" AND "));
-    }
+    let plan = build_search_where(req);
+    sql.push_str(&plan.sql());
 
     let sort_column = match req.sort_by.as_str() {
         "file_size" => "file_size",
@@ -112,32 +237,11 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
         sort_column, sort_direction
     ));
 
-    let mut query = sqlx::query_as::<_, Asset>(&sql);
-
-    if has_fts {
-        if let Some(ref fts) = fts_query {
-            query = query.bind(fts);
-        }
-    }
-
-    if let Some(ref t) = req.asset_type { query = query.bind(t); }
-    if let Some(id) = req.library_folder_id { query = query.bind(id); }
-    if let Some(id) = req.collection_id { query = query.bind(id); }
-    if let Some(v) = req.is_favorite { query = query.bind(if v { 1 } else { 0 }); }
-    if let Some(v) = req.is_missing { query = query.bind(if v { 1 } else { 0 }); }
-    if let Some(v) = req.min_file_size { query = query.bind(v); }
-    if let Some(v) = req.max_file_size { query = query.bind(v); }
-    if let Some(v) = req.min_width { query = query.bind(v); }
-    if let Some(v) = req.max_width { query = query.bind(v); }
-    if let Some(v) = req.min_height { query = query.bind(v); }
-    if let Some(v) = req.max_height { query = query.bind(v); }
-    if let Some(ref v) = req.modified_after { query = query.bind(v); }
-    if let Some(ref v) = req.modified_before { query = query.bind(v); }
-
-    let limit = req.limit.clamp(1, 2000);
-    let offset = req.offset.max(0);
-    query = query.bind(limit).bind(offset);
-
+    let query = sqlx::query_as::<_, Asset>(&sql);
+    let mut query = bind_asset_query(query, &plan.binds);
+    query = query
+        .bind(req.limit.clamp(1, 2000))
+        .bind(req.offset.max(0));
     let rows = query.fetch_all(db).await?;
     Ok(rows)
 }
@@ -145,60 +249,10 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
 pub async fn count_search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow::Result<i64> {
     let mut sql = String::from("SELECT COUNT(*) FROM assets");
 
-    let mut conditions: Vec<String> = Vec::new();
-    conditions.push(exclude_system_metadata_condition());
-
-    let fts_query = build_fts_query(req);
-    let has_fts = fts_query.as_ref().map_or(false, |q| !q.is_empty());
-    let force_zero = fts_query.as_ref().map_or(false, |q| q.is_empty());
-
-    if force_zero {
-        conditions.push("1 = 0".to_string());
-    } else if has_fts {
-        conditions.push("assets.id IN (SELECT rowid FROM asset_search_fts WHERE asset_search_fts MATCH ?)".to_string());
-    }
-
-    if req.asset_type.is_some() { conditions.push("asset_type = ?".to_string()); }
-    if req.library_folder_id.is_some() { conditions.push("library_folder_id = ?".to_string()); }
-    if req.collection_id.is_some() { conditions.push("id IN (SELECT asset_id FROM collection_assets WHERE collection_id = ?)".to_string()); }
-    if req.is_favorite.is_some() { conditions.push("is_favorite = ?".to_string()); }
-    if req.is_missing.is_some() { conditions.push("is_missing = ?".to_string()); }
-    if req.min_file_size.is_some() { conditions.push("file_size >= ?".to_string()); }
-    if req.max_file_size.is_some() { conditions.push("file_size <= ?".to_string()); }
-    if req.min_width.is_some() { conditions.push("width >= ?".to_string()); }
-    if req.max_width.is_some() { conditions.push("width <= ?".to_string()); }
-    if req.min_height.is_some() { conditions.push("height >= ?".to_string()); }
-    if req.max_height.is_some() { conditions.push("height <= ?".to_string()); }
-    if req.modified_after.is_some() { conditions.push("modified_at >= ?".to_string()); }
-    if req.modified_before.is_some() { conditions.push("modified_at <= ?".to_string()); }
-
-    if !conditions.is_empty() {
-        sql.push_str(" WHERE ");
-        sql.push_str(&conditions.join(" AND "));
-    }
-
-    let mut query = sqlx::query_scalar::<_, i64>(&sql);
-
-    if has_fts {
-        if let Some(ref fts) = fts_query {
-            query = query.bind(fts);
-        }
-    }
-
-    if let Some(ref t) = req.asset_type { query = query.bind(t); }
-    if let Some(id) = req.library_folder_id { query = query.bind(id); }
-    if let Some(id) = req.collection_id { query = query.bind(id); }
-    if let Some(v) = req.is_favorite { query = query.bind(if v { 1 } else { 0 }); }
-    if let Some(v) = req.is_missing { query = query.bind(if v { 1 } else { 0 }); }
-    if let Some(v) = req.min_file_size { query = query.bind(v); }
-    if let Some(v) = req.max_file_size { query = query.bind(v); }
-    if let Some(v) = req.min_width { query = query.bind(v); }
-    if let Some(v) = req.max_width { query = query.bind(v); }
-    if let Some(v) = req.min_height { query = query.bind(v); }
-    if let Some(v) = req.max_height { query = query.bind(v); }
-    if let Some(ref v) = req.modified_after { query = query.bind(v); }
-    if let Some(ref v) = req.modified_before { query = query.bind(v); }
-
+    let plan = build_search_where(req);
+    sql.push_str(&plan.sql());
+    let query = sqlx::query_scalar::<_, i64>(&sql);
+    let query = bind_count_query(query, &plan.binds);
     let count = query.fetch_one(db).await?;
     Ok(count)
 }
@@ -251,94 +305,34 @@ mod tests {
     }
 
     #[test]
-    fn build_fts_query_returns_none_for_empty_query() {
-        let req = empty_request();
-        assert_eq!(build_fts_query(&req), None);
-    }
-
-    #[test]
-    fn build_fts_query_returns_empty_string_when_no_scopes() {
-        let mut req = empty_request();
-        req.query = "hero".to_string();
-        req.search_file_name = false;
-        assert_eq!(build_fts_query(&req), Some(String::new()));
-    }
-
-    #[test]
-    fn build_fts_query_splits_terms_and_joins_with_and() {
-        let mut req = empty_request();
-        req.query = "hero idle".to_string();
-        req.search_file_name = true;
-        req.search_note = true;
-        req.search_path = true;
-        req.search_tags = true;
-        assert_eq!(build_fts_query(&req), Some("\"hero\"* AND \"idle\"*".to_string()));
-    }
-
-    #[test]
-    fn build_fts_query_escapes_double_quotes() {
-        let mut req = empty_request();
-        req.query = "5\" sword".to_string();
-        req.search_file_name = true;
-        req.search_note = true;
-        req.search_path = true;
-        req.search_tags = true;
-        assert_eq!(build_fts_query(&req), Some("\"5\"\"\"* AND \"sword\"*".to_string()));
-    }
-
-    #[test]
-    fn build_fts_query_uses_prefix_match_for_all_columns() {
-        let mut req = empty_request();
-        req.query = "hero".to_string();
-        req.search_file_name = true;
-        req.search_note = true;
-        req.search_path = true;
-        req.search_tags = true;
-        assert_eq!(build_fts_query(&req), Some("\"hero\"*".to_string()));
-    }
-
-    #[test]
-    fn build_fts_query_uses_column_scoped_prefix_match() {
-        let mut req = empty_request();
-        req.query = "hero".to_string();
-        req.search_file_name = true;
-        req.search_note = false;
-        req.search_path = false;
-        req.search_tags = true;
+    fn classify_terms_uses_trigram_for_three_or_more_characters() {
         assert_eq!(
-            build_fts_query(&req),
-            Some("(file_name:\"hero\"* OR tags:\"hero\"*)".to_string())
+            classify_terms("背景树"),
+            vec![KeywordTerm::Trigram("背景树".to_string())]
         );
     }
 
     #[test]
-    fn build_fts_query_single_scope_no_parens() {
-        let mut req = empty_request();
-        req.query = "hero".to_string();
-        req.search_file_name = false;
-        req.search_note = true;
-        req.search_path = false;
-        req.search_tags = false;
-        assert_eq!(build_fts_query(&req), Some("note:\"hero\"*".to_string()));
+    fn classify_terms_escapes_short_like_wildcards() {
+        assert_eq!(
+            classify_terms("%_"),
+            vec![KeywordTerm::ShortLike("%\\%\\_%".to_string())]
+        );
     }
 
-    #[test]
-    fn build_fts_query_filters_out_empty_terms() {
+    #[tokio::test]
+    async fn risky_search_input_is_literal_under_hybrid_search() {
+        let pool = cjk_search_pool().await;
         let mut req = empty_request();
-        req.query = "hero   ".to_string();
+        req.query = "\" OR * % _".to_string();
         req.search_file_name = true;
         req.search_note = true;
         req.search_path = true;
         req.search_tags = true;
-        assert_eq!(build_fts_query(&req), Some("\"hero\"*".to_string()));
-    }
 
-    #[test]
-    fn build_fts_query_all_whitespace_returns_none() {
-        let mut req = empty_request();
-        req.query = "    ".to_string();
-        req.search_file_name = true;
-        assert_eq!(build_fts_query(&req), None);
+        let page = search_assets_page(&pool, &req).await.unwrap();
+
+        assert_eq!(page.total_count, 0);
     }
 
     #[test]
@@ -426,6 +420,11 @@ mod tests {
                 file_name, absolute_path, note, tags, tokenize = 'unicode61'
             )"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'trigram'
+            )"
+        ).execute(&pool).await.unwrap();
 
         sqlx::query("INSERT INTO library_folders (id, name, path, created_at, is_enabled) VALUES (1, 'Test', '/test', '2024-01-01T00:00:00Z', 1)")
             .execute(&pool).await.unwrap();
@@ -443,6 +442,13 @@ mod tests {
             .execute(&pool).await.unwrap();
         sqlx::query(
             "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/hero.png', 'main character', ''),
+            (2, 'villain.png', '/test/villain.png', '', 'important'),
+            (3, 'sound.wav', '/test/sound.wav', '', ''),
+            (4, '._hero.png', '/test/__MACOSX/._hero.png', '', '')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_trigram_fts (rowid, file_name, absolute_path, note, tags) VALUES
             (1, 'hero.png', '/test/hero.png', 'main character', ''),
             (2, 'villain.png', '/test/villain.png', '', 'important'),
             (3, 'sound.wav', '/test/sound.wav', '', ''),
@@ -820,14 +826,50 @@ mod tests {
                 file_name, absolute_path, note, tags, tokenize = 'unicode61'
             )"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'trigram'
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id)
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, note, is_favorite, is_missing, created_at, updated_at) VALUES
             (1, 1, '/test/hero.png', 'hero.png', 'png', 'image', '2024-01-01T00:00:00Z', '主角待机', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
             (2, 1, '/test/tree.png', 'tree.png', 'png', 'image', '2024-01-01T00:00:00Z', '森林背景', 0, 0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
         ).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO tags (id, name, color, created_at, last_used_at) VALUES (1, '角色', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'), (2, '场景', '#5B8DEF', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO asset_tags (asset_id, tag_id) VALUES (1, 1), (2, 2)")
+            .execute(&pool).await.unwrap();
         sqlx::query(
             "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/hero.png', '主角待机', '角色'),
+            (2, 'tree.png', '/test/tree.png', '森林背景', '场景')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_trigram_fts (rowid, file_name, absolute_path, note, tags) VALUES
             (1, 'hero.png', '/test/hero.png', '主角待机', '角色'),
             (2, 'tree.png', '/test/tree.png', '森林背景', '场景')"
         ).execute(&pool).await.unwrap();
@@ -927,6 +969,11 @@ mod tests {
                 file_name, absolute_path, note, tags, tokenize = 'unicode61'
             )"
         ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(
+                file_name, absolute_path, note, tags, tokenize = 'trigram'
+            )"
+        ).execute(&pool).await.unwrap();
 
         sqlx::query(
             "INSERT INTO assets (id, library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, note, is_favorite, is_missing, created_at, updated_at) VALUES
@@ -940,6 +987,12 @@ mod tests {
             .execute(&pool).await.unwrap();
         sqlx::query(
             "INSERT INTO asset_search_fts (rowid, file_name, absolute_path, note, tags) VALUES
+            (1, 'hero.png', '/test/hero.png', 'main character', ''),
+            (2, 'villain.png', '/test/villain.png', '', 'important'),
+            (3, 'sound.wav', '/test/sound.wav', '', '')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO asset_search_trigram_fts (rowid, file_name, absolute_path, note, tags) VALUES
             (1, 'hero.png', '/test/hero.png', 'main character', ''),
             (2, 'villain.png', '/test/villain.png', '', 'important'),
             (3, 'sound.wav', '/test/sound.wav', '', '')"
@@ -1047,13 +1100,12 @@ mod tests {
         let page = search_assets_page(&pool, &req).await.unwrap();
         assert_eq!(page.total_count, 0);
 
-        // Punctuation should not cause errors
+        // Punctuation should not cause errors (literal substring, so no match)
         let mut req = empty_request();
         req.query = "hero.png!@#".to_string();
         req.search_file_name = true;
         let page = search_assets_page(&pool, &req).await.unwrap();
-        assert_eq!(page.total_count, 1);
-        assert_eq!(page.assets[0].file_name, "hero.png");
+        assert_eq!(page.total_count, 0);
     }
 
     async fn cjk_search_pool() -> SqlitePool {

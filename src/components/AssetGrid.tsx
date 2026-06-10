@@ -1,74 +1,75 @@
-import { useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { Box, FileImage, FileText, Film, Music, Star, Type } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../types/asset";
+import { AssetCard } from "./AssetCard";
+
+const CARD_WIDTH = 176;
+const CARD_HEIGHT = 238;
+const GRID_GAP = 12;
+const OVERSCAN_ROWS = 3;
 
 type Props = {
   assets: Asset[];
   selectedIds: number[];
   onSelectionChange: (ids: number[]) => void;
   onToggleFavorite: (asset: Asset) => void;
+  resetKey?: string | number;
 };
 
-function placeholderText(asset: Asset, imageLoadFailed: boolean): string {
-  if (asset.is_missing) return "缺失";
-  if (imageLoadFailed) return "预览加载失败";
-  if (asset.thumbnail_status === "failed") return "缩略图失败";
-  if (asset.thumbnail_status === "queued" || asset.thumbnail_status === "generating") return "生成中";
-  if (asset.extension.toLowerCase() === "psd") return "PSD";
-  switch (asset.asset_type) {
-    case "image":
-      return "图片";
-    case "audio":
-      return "音频";
-    case "video":
-      return "视频";
-    case "font":
-      return "字体";
-    case "model3d":
-      return "3D";
-    case "spine":
-      return "Spine";
-    default:
-      return asset.extension.toUpperCase();
-  }
-}
+export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite, resetKey }: Props) {
+  const [failedMap, setFailedMap] = useState<Map<number, { thumbnail_path: string | null; thumbnail_status: string }>>(new Map());
 
-function assetTypeLabel(asset: Asset): string {
-  if (asset.extension) {
-    if (asset.extension.toLowerCase() === "spine") return "Spine";
-    return asset.extension.toUpperCase();
-  }
-  switch (asset.asset_type) {
-    case "model3d":
-      return "3D";
-    case "spine":
-      return "Spine";
-    default:
-      return asset.asset_type.toUpperCase();
-  }
-}
+  const viewportRef = useRef<HTMLElement | null>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [scrollTop, setScrollTop] = useState(0);
 
-function assetTypeIcon(assetType: Asset["asset_type"]) {
-  switch (assetType) {
-    case "image":
-      return <FileImage size={14} aria-hidden="true" />;
-    case "audio":
-      return <Music size={14} aria-hidden="true" />;
-    case "video":
-      return <Film size={14} aria-hidden="true" />;
-    case "font":
-      return <Type size={14} aria-hidden="true" />;
-    case "model3d":
-    case "spine":
-      return <Box size={14} aria-hidden="true" />;
-    default:
-      return <FileText size={14} aria-hidden="true" />;
-  }
-}
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
 
-export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite }: Props) {
-  const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
+    function updateFromClient(element: HTMLElement) {
+      setViewport({
+        width: element.clientWidth,
+        height: element.clientHeight,
+      });
+    }
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        setViewport({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      });
+      ro.observe(el);
+    } else {
+      updateFromClient(el);
+    }
+
+    return () => {
+      if (ro) ro.disconnect();
+    };
+  }, []);
+
+  // Clear failed state when a currently-visible asset's thumbnail metadata changes.
+  useEffect(() => {
+    const assetMap = new Map(assets.map((a) => [a.id, a]));
+    setFailedMap((prev) => {
+      const next = new Map(prev);
+      for (const [id, signature] of next) {
+        const current = assetMap.get(id);
+        if (
+          current &&
+          (current.thumbnail_path !== signature.thumbnail_path ||
+            current.thumbnail_status !== signature.thumbnail_status)
+        ) {
+          next.delete(id);
+        }
+      }
+      return next;
+    });
+  }, [assets]);
 
   function selectOnly(assetId: number) {
     onSelectionChange([assetId]);
@@ -83,82 +84,101 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
   }
 
   function markFailed(assetId: number) {
-    setFailedIds((prev) => new Set(prev).add(assetId));
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return;
+    setFailedMap((prev) => {
+      const next = new Map(prev);
+      next.set(assetId, {
+        thumbnail_path: asset.thumbnail_path,
+        thumbnail_status: asset.thumbnail_status,
+      });
+      return next;
+    });
   }
 
-  return (
-    <section className="asset-grid">
-      {assets.map((asset) => {
-        const imageLoadFailed = failedIds.has(asset.id);
-        const thumbnailPath = asset.thumbnail_path;
-        const canRenderThumbnail =
-          !asset.is_missing &&
-          asset.thumbnail_status === "ready" &&
-          typeof thumbnailPath === "string" &&
-          thumbnailPath.length > 0 &&
-          !imageLoadFailed;
+  const columns = Math.max(1, Math.floor((viewport.width + GRID_GAP) / (CARD_WIDTH + GRID_GAP)));
+  const rowCount = Math.ceil(assets.length / columns);
 
-        return (
-          <div
-            key={asset.id}
-            className={selectedIds.includes(asset.id) ? "asset-card selected" : "asset-card"}
-            onClick={() => selectOnly(asset.id)}
-            title={asset.absolute_path}
-            role="button"
-            tabIndex={0}
-          >
-            <input
-              type="checkbox"
-              className="asset-select-checkbox"
-              checked={selectedIds.includes(asset.id)}
-              aria-label={`选择 ${asset.file_name}`}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => toggleMulti(asset.id, event.currentTarget.checked)}
-            />
-            <div className="thumb">
-              <span className="asset-type-badge">
-                {assetTypeIcon(asset.asset_type)}
-                {assetTypeLabel(asset)}
-              </span>
-              {canRenderThumbnail ? (
-                <img
-                  src={convertFileSrc(thumbnailPath)}
-                  alt=""
-                  onError={() => markFailed(asset.id)}
-                />
-              ) : (
-                <span data-testid="asset-placeholder">{placeholderText(asset, imageLoadFailed)}</span>
-              )}
-            </div>
-            <div className="asset-card-body">
-              <div className="asset-name">{asset.file_name}</div>
-              <div className="asset-meta">
-                {asset.width && asset.height ? `${asset.width} x ${asset.height}` : asset.asset_type}
-              </div>
-              {asset.tags && asset.tags.length > 0 && (
-                <div className="asset-tag-row">
-                  {asset.tags.slice(0, 2).map((tag) => (
-                    <span key={tag} className="asset-tag-chip">{tag}</span>
-                  ))}
-                  {asset.tags.length > 2 && (
-                    <span className="asset-tag-chip muted-chip">+{asset.tags.length - 2}</span>
-                  )}
-                </div>
-              )}
-            </div>
-            <button
-              className={asset.is_favorite ? "favorite active" : "favorite"}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleFavorite(asset);
+  // Reset scroll to top when the dataset is replaced (query/filter/sort change),
+  // but not when appending more assets (resetKey stays the same).
+  const prevResetKeyRef = useRef<string | number | undefined>(undefined);
+  useEffect(() => {
+    if (prevResetKeyRef.current !== undefined && prevResetKeyRef.current !== resetKey) {
+      const el = viewportRef.current;
+      if (el) {
+        el.scrollTop = 0;
+        setScrollTop(0);
+      }
+    }
+    prevResetKeyRef.current = resetKey;
+  }, [resetKey]);
+
+  // Clamp scrollTop when the list shrinks so the viewport doesn't sit past the content.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const totalHeight = rowCount * (CARD_HEIGHT + GRID_GAP);
+    const maxScroll = Math.max(0, totalHeight - el.clientHeight);
+    if (el.scrollTop > maxScroll) {
+      el.scrollTop = maxScroll;
+      setScrollTop(maxScroll);
+    }
+  }, [assets.length, rowCount]);
+
+  const firstVisibleRow = Math.max(
+    0,
+    Math.min(
+      Math.floor(scrollTop / (CARD_HEIGHT + GRID_GAP)) - OVERSCAN_ROWS,
+      rowCount - 1
+    )
+  );
+  const visibleRowCount = Math.ceil(viewport.height / (CARD_HEIGHT + GRID_GAP)) + OVERSCAN_ROWS * 2;
+  const lastVisibleRow = Math.min(rowCount, firstVisibleRow + visibleRowCount);
+  const startIndex = firstVisibleRow * columns;
+  const endIndex = Math.min(assets.length, lastVisibleRow * columns);
+  const visibleAssets = assets.slice(startIndex, endIndex);
+
+  return (
+    <section
+      ref={viewportRef}
+      className="asset-grid-viewport"
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+    >
+      <div
+        className="asset-grid-spacer"
+        style={{ height: rowCount * (CARD_HEIGHT + GRID_GAP) }}
+      >
+        {visibleAssets.map((asset, localIndex) => {
+          const index = startIndex + localIndex;
+          const row = Math.floor(index / columns);
+          const column = index % columns;
+          const signature = failedMap.get(asset.id);
+          const imageLoadFailed =
+            signature !== undefined &&
+            signature.thumbnail_path === asset.thumbnail_path &&
+            signature.thumbnail_status === asset.thumbnail_status;
+
+          return (
+            <AssetCard
+              key={asset.id}
+              asset={asset}
+              selected={selectedIds.includes(asset.id)}
+              imageLoadFailed={imageLoadFailed}
+              onImageError={markFailed}
+              onSelectOnly={selectOnly}
+              onToggleMulti={toggleMulti}
+              onToggleFavorite={onToggleFavorite}
+              style={{
+                position: "absolute",
+                width: CARD_WIDTH,
+                height: CARD_HEIGHT,
+                overflow: "hidden",
+                transform: `translate(${column * (CARD_WIDTH + GRID_GAP)}px, ${row * (CARD_HEIGHT + GRID_GAP)}px)`,
               }}
-              title={asset.is_favorite ? "取消收藏" : "收藏"}
-            >
-              <Star size={15} fill={asset.is_favorite ? "currentColor" : "none"} aria-hidden="true" />
-            </button>
-          </div>
-        );
-      })}
+            />
+          );
+        })}
+      </div>
     </section>
   );
 }

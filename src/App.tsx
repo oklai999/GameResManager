@@ -317,6 +317,16 @@ function AppInner() {
     executeSearch();
   }, [executeSearch]);
 
+  const gridResetKey = JSON.stringify({
+    query: query.trim(),
+    scope,
+    activeFilter,
+    selectedFolderId,
+    selectedCollectionId,
+    filters,
+    sort,
+  });
+
   const displayAssets = activeFilter === "recent"
     ? recentAssetIds
         .map((id) => assets.find((a) => a.id === id))
@@ -561,6 +571,7 @@ function AppInner() {
               selectedIds={selectedIds}
               onSelectionChange={setSelectedIds}
               onToggleFavorite={handleToggleFavorite}
+              resetKey={gridResetKey}
             />
             {displayAssets.length > 0 && (
               <div className="result-footer">

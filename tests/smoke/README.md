@@ -51,6 +51,20 @@ Use a fixture folder with known assets.
 - [ ] Confirm removal and confirm the folder disappears from the sidebar, but the source folder still exists on disk.
 - [ ] Confirm already-deleted folder's assets no longer appear in searches or filters.
 
+## Folder Manager Backup Cleanup Smoke Test
+
+Use this before backing up the project directory when you want the app index to forget test resource folders.
+
+- [ ] Add at least two fixture folders and scan one of them.
+- [ ] Click `管理` next to `素材文件夹`.
+- [ ] Confirm the `资源库文件夹管理` panel lists folder name, absolute path, resource count, missing count, accessibility, and last scan time.
+- [ ] Click `打开文件夹` and confirm the source folder opens in File Explorer.
+- [ ] Click `从资源库移除` for one folder and confirm the warning says only app indexes and related organization data are removed.
+- [ ] Confirm removal and verify the folder disappears from the sidebar and search results.
+- [ ] Confirm the source folder and its files still exist on disk.
+- [ ] Start scanning another folder, open `管理`, and confirm its remove action is disabled until the scan is cancelled.
+- [ ] Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
+
 ---
 
 ## Thumbnail Display Smoke Test
@@ -199,4 +213,18 @@ Use a fixture folder with the newly covered formats.
 - Click `加载更多` and confirm additional cards append without clearing selection unexpectedly.
 - Change a search query, filter, or sort option and confirm results reset to the first page.
 - Confirm favorite, tag, collection, details, open file, open folder, and copy path still work on loaded pages.
+- Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
+
+---
+
+## v0.6.0 Virtualized Grid And FTS Search Smoke Test
+
+- Scan or choose a library with at least 2,000 indexed assets.
+- Confirm the grid scrolls smoothly and does not render thousands of card nodes at once.
+- Confirm selection, checkbox multi-select, favorite toggle, details panel, tags, collections, open file, reveal folder, and copy path still work on cards after scrolling deep into the list.
+- Search by file name and confirm matching assets appear.
+- Add or edit a note, search by that note text, and confirm the asset appears.
+- Add a tag, search by that tag text, and confirm the asset appears.
+- For a Chinese note such as `主角待机`, search `主角` and confirm the asset appears (prefix match). Search `待机` and confirm it does **not** appear (arbitrary CJK substring search is not supported in v0.6.0).
+- Change type, size, dimension, modified-time, favorite, missing, folder, collection, and sort filters and confirm pagination count remains coherent.
 - Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.

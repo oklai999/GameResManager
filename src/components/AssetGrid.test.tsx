@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssetGrid } from "./AssetGrid";
 import type { Asset } from "../types/asset";
 
@@ -33,7 +33,39 @@ function makeAsset(overrides: Partial<Asset>): Asset {
   return { ...asset, ...overrides };
 }
 
+function mockGridMeasurements({ width, height }: { width: number; height: number }) {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+      observe(target: Element) {
+        this.callback(
+          [
+            {
+              target,
+              contentRect: { width, height, top: 0, left: 0, bottom: height, right: width, x: 0, y: 0 },
+              borderBoxSize: [{ inlineSize: width, blockSize: height }],
+              contentBoxSize: [{ inlineSize: width, blockSize: height }],
+              devicePixelContentBoxSize: [{ inlineSize: width, blockSize: height }],
+            } as unknown as ResizeObserverEntry,
+          ],
+          this
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+  );
+}
+
 describe("AssetGrid", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("calls selection change when an asset is clicked", async () => {
     const onSelectionChange = vi.fn();
     render(<AssetGrid assets={[asset]} selectedIds={[]} onSelectionChange={onSelectionChange} onToggleFavorite={vi.fn()} />);
@@ -194,5 +226,262 @@ describe("AssetGrid", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: "选择 tree.png" }));
 
     expect(onSelectionChange).toHaveBeenCalledWith([1]);
+  });
+
+  it("retries thumbnail when thumbnail_path changes after a previous failure", () => {
+    const { container, rerender } = render(
+      <AssetGrid
+        assets={[{ ...asset, thumbnail_path: "C:/cache/icon.webp", thumbnail_status: "ready" as const }]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    fireEvent.error(img as HTMLImageElement);
+
+    expect(screen.getByText("预览加载失败")).toBeInTheDocument();
+
+    rerender(
+      <AssetGrid
+        assets={[{ ...asset, thumbnail_path: "C:/cache/icon2.webp", thumbnail_status: "ready" as const }]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const newImg = container.querySelector("img");
+    expect(newImg).not.toBeNull();
+    expect(newImg).toHaveAttribute("src", "C:/cache/icon2.webp");
+  });
+
+  it("preserves thumbnail failure state after asset card is unmounted and remounted", () => {
+    const { container, rerender } = render(
+      <AssetGrid
+        assets={[{ ...asset, thumbnail_path: "C:/cache/icon.webp", thumbnail_status: "ready" as const }]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    fireEvent.error(img as HTMLImageElement);
+
+    expect(screen.getByText("预览加载失败")).toBeInTheDocument();
+
+    // Unmount by removing asset
+    rerender(
+      <AssetGrid
+        assets={[]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+    expect(container.querySelector("img")).toBeNull();
+
+    // Remount by adding asset back
+    rerender(
+      <AssetGrid
+        assets={[{ ...asset, thumbnail_path: "C:/cache/icon.webp", thumbnail_status: "ready" as const }]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const newImg = container.querySelector("img");
+    expect(newImg).toBeNull();
+    expect(screen.getByText("预览加载失败")).toBeInTheDocument();
+  });
+
+  it("renders only a visible window for large asset lists", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    const manyAssets = Array.from({ length: 500 }, (_, index) =>
+      makeAsset({
+        id: index + 1,
+        file_name: `asset-${index + 1}.png`,
+        absolute_path: `C:/assets/asset-${index + 1}.png`,
+      })
+    );
+
+    render(
+      <AssetGrid
+        assets={manyAssets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByRole("button", { name: /asset-/ }).length).toBeLessThan(100);
+    expect(screen.getByText("asset-1.png")).toBeInTheDocument();
+  });
+
+  it("updates rendered window after scrolling", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    const manyAssets = Array.from({ length: 500 }, (_, index) =>
+      makeAsset({
+        id: index + 1,
+        file_name: `asset-${index + 1}.png`,
+        absolute_path: `C:/assets/asset-${index + 1}.png`,
+      })
+    );
+
+    const { container } = render(
+      <AssetGrid
+        assets={manyAssets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("asset-1.png")).toBeInTheDocument();
+
+    const viewport = container.querySelector(".asset-grid-viewport") as HTMLElement;
+    viewport.scrollTop = 2000;
+    fireEvent.scroll(viewport);
+
+    expect(screen.queryByText("asset-1.png")).not.toBeInTheDocument();
+    expect(screen.getByText("asset-21.png")).toBeInTheDocument();
+  });
+
+  it("recovers from deep scroll when the list shortens", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    const manyAssets = Array.from({ length: 500 }, (_, index) =>
+      makeAsset({
+        id: index + 1,
+        file_name: `asset-${index + 1}.png`,
+        absolute_path: `C:/assets/asset-${index + 1}.png`,
+      })
+    );
+
+    const { container, rerender } = render(
+      <AssetGrid
+        assets={manyAssets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const viewport = container.querySelector(".asset-grid-viewport") as HTMLElement;
+    viewport.scrollTop = 10000;
+    fireEvent.scroll(viewport);
+
+    rerender(
+      <AssetGrid
+        assets={manyAssets.slice(0, 10)}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    expect(viewport.scrollTop).toBeLessThan(10000);
+    expect(screen.getByText("asset-1.png")).toBeInTheDocument();
+  });
+
+  it("preserves interaction after scrolling", async () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    const manyAssets = Array.from({ length: 500 }, (_, index) =>
+      makeAsset({
+        id: index + 1,
+        file_name: `asset-${index + 1}.png`,
+        absolute_path: `C:/assets/asset-${index + 1}.png`,
+      })
+    );
+
+    const onSelectionChange = vi.fn();
+    const { container } = render(
+      <AssetGrid
+        assets={manyAssets}
+        selectedIds={[]}
+        onSelectionChange={onSelectionChange}
+        onToggleFavorite={vi.fn()}
+      />
+    );
+
+    const viewport = container.querySelector(".asset-grid-viewport") as HTMLElement;
+    viewport.scrollTop = 2000;
+    fireEvent.scroll(viewport);
+
+    await userEvent.click(screen.getByText("asset-21.png"));
+
+    expect(onSelectionChange).toHaveBeenCalledWith([21]);
+  });
+
+  it("resets scroll when resetKey changes even with same first asset id", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    const assets = [
+      makeAsset({ id: 1, file_name: "a.png", absolute_path: "C:/assets/a.png" }),
+      makeAsset({ id: 2, file_name: "b.png", absolute_path: "C:/assets/b.png" }),
+    ];
+
+    const { container, rerender } = render(
+      <AssetGrid
+        assets={assets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        resetKey="A"
+      />
+    );
+
+    const viewport = container.querySelector(".asset-grid-viewport") as HTMLElement;
+    viewport.scrollTop = 1000;
+    fireEvent.scroll(viewport);
+
+    rerender(
+      <AssetGrid
+        assets={assets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        resetKey="B"
+      />
+    );
+
+    expect(viewport.scrollTop).toBe(0);
+  });
+
+  it("preserves scroll when more assets append with same resetKey", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    const fewAssets = [makeAsset({ id: 1, file_name: "a.png", absolute_path: "C:/assets/a.png" })];
+    const manyAssets = Array.from({ length: 50 }, (_, i) =>
+      makeAsset({ id: i + 1, file_name: `asset-${i + 1}.png`, absolute_path: `C:/assets/asset-${i + 1}.png` })
+    );
+
+    const { container, rerender } = render(
+      <AssetGrid
+        assets={fewAssets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        resetKey="A"
+      />
+    );
+
+    const viewport = container.querySelector(".asset-grid-viewport") as HTMLElement;
+    viewport.scrollTop = 500;
+    fireEvent.scroll(viewport);
+
+    rerender(
+      <AssetGrid
+        assets={manyAssets}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        resetKey="A"
+      />
+    );
+
+    expect(viewport.scrollTop).toBe(500);
   });
 });

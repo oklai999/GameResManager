@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LibrarySidebar } from "./LibrarySidebar";
@@ -468,5 +468,122 @@ describe("LibrarySidebar", () => {
 
     expect(onDeleteFolder).toHaveBeenCalledWith(1);
     confirmSpy.mockRestore();
+  });
+
+  it("opens a folder management panel for backup cleanup", async () => {
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{ 1: { folder_id: 1, total: 12, missing: 2, is_accessible: true } }}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "管理文件夹" }));
+
+    const dialog = screen.getByRole("dialog", { name: "资源库文件夹管理" });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("备份工程前，可以在这里移除应用内索引。不会删除、移动或修改磁盘上的原始文件。")).toBeInTheDocument();
+    expect(within(dialog).getByText("C:/assets")).toBeInTheDocument();
+    expect(within(dialog).getByText(/12 个资源/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/2 个缺失/)).toBeInTheDocument();
+  });
+
+  it("removes a folder index from the management panel after confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onDeleteFolder = vi.fn();
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={onDeleteFolder}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "管理文件夹" }));
+    await userEvent.click(screen.getByRole("button", { name: "从资源库移除 Assets 的索引" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "确定要从资源库移除「Assets」的索引吗？这只会删除应用内索引和关联整理数据，不会删除磁盘上的原始文件。"
+    );
+    expect(onDeleteFolder).toHaveBeenCalledWith(1);
+    confirmSpy.mockRestore();
+  });
+
+  it("disables management panel removal while a folder is scanning", async () => {
+    render(
+      <LibrarySidebar
+        folders={[makeFolder(1, "Assets")]}
+        collections={[]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={true}
+        latestJobs={{
+          1: {
+            id: 10,
+            library_folder_id: 1,
+            status: "running",
+            started_at: "2026-06-08T00:00:00Z",
+            finished_at: null,
+            cancelled_at: null,
+            found_count: 1,
+            added_count: 0,
+            updated_count: 0,
+            unchanged_count: 0,
+            missing_count: 0,
+            skipped_count: 0,
+            current_path: null,
+            error_message: null,
+          },
+        }}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "管理文件夹" }));
+
+    expect(screen.getByRole("button", { name: "从资源库移除 Assets 的索引" })).toBeDisabled();
+    expect(screen.getByText("扫描中，先取消扫描后再移除索引")).toBeInTheDocument();
   });
 });

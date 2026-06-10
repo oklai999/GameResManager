@@ -288,6 +288,23 @@ body {
   background: #1b2840;
 }
 
+.folder-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.folder-manager-open-btn {
+  border: 1px solid #2d3447;
+  border-radius: 4px;
+  background: #1d2431;
+  color: #dce5f5;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .open-folder-btn {
   padding: 4px 8px;
   font-size: 12px;
@@ -332,6 +349,143 @@ body {
 
 .delete-folder-btn:disabled {
   opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.folder-manager-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 8, 13, 0.72);
+}
+
+.folder-manager-panel {
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid #2d3447;
+  border-radius: 12px;
+  background: #111722;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.folder-manager-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid #242938;
+}
+
+.folder-manager-header h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  color: #f4f7fb;
+}
+
+.folder-manager-header p {
+  margin: 0;
+  color: #9aa7bc;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.folder-manager-close-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #2d3447;
+  border-radius: 6px;
+  background: #171d29;
+  color: #c7d2e5;
+  cursor: pointer;
+}
+
+.folder-manager-empty {
+  padding: 28px 18px;
+  color: #8f9aaf;
+}
+
+.folder-manager-list {
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.folder-manager-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid #242938;
+  border-radius: 8px;
+  background: #151b27;
+}
+
+.folder-manager-item + .folder-manager-item {
+  margin-top: 10px;
+}
+
+.folder-manager-info {
+  min-width: 0;
+}
+
+.folder-manager-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #f2f5fb;
+  font-weight: 600;
+}
+
+.folder-manager-path {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #9aa7bc;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-manager-meta {
+  margin-top: 6px;
+  color: #7f8ba3;
+  font-size: 12px;
+}
+
+.folder-manager-warning {
+  margin-top: 8px;
+  color: #f0b866;
+  font-size: 12px;
+}
+
+.folder-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.remove-folder-index-btn {
+  border: 1px solid #74313b;
+  border-radius: 5px;
+  background: #301820;
+  color: #ffb6c0;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.remove-folder-index-btn:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -718,4 +872,15 @@ body {
   color: #8f9aaf;
   font-size: 13px;
   max-width: 320px;
+}
+
+.asset-grid-viewport {
+  height: min(68vh, calc(100vh - 230px));
+  overflow: auto;
+  min-height: 360px;
+}
+
+.asset-grid-spacer {
+  position: relative;
+  min-width: 100%;
 }
