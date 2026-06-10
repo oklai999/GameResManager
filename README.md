@@ -129,9 +129,9 @@ cargo check
 
 Current local verification baseline:
 
-- `npm test`: 69 frontend tests passing.
+- `npm test`: 71 frontend tests passing.
 - `npm run build`: succeeds.
-- `cargo test`: 103 Rust unit tests plus the build script integration test passing.
+- `cargo test`: 107 Rust unit tests plus the build script integration test passing.
 - `cargo check`: succeeds when the local MSVC and Windows SDK environment is configured.
 
 Manual smoke checks live in [tests/smoke/README.md](tests/smoke/README.md).
