@@ -9,7 +9,7 @@ function makeFolder(id: number, name: string) {
 }
 
 function makeCollection(id: number, name: string): Collection {
-  return { id, name, description: "" };
+  return { id, name, description: "", asset_count: 0 };
 }
 
 describe("LibrarySidebar", () => {
@@ -34,6 +34,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -62,6 +64,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -92,6 +96,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -102,6 +108,7 @@ describe("LibrarySidebar", () => {
 
   it("calls onSelectFolder when folder row is clicked", async () => {
     const onSelectFolder = vi.fn();
+    const onSelectCollection = vi.fn();
     render(
       <LibrarySidebar
         folders={[makeFolder(1, "Assets")]}
@@ -111,7 +118,7 @@ describe("LibrarySidebar", () => {
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
         onSelectFolder={onSelectFolder}
-        onSelectCollection={vi.fn()}
+        onSelectCollection={onSelectCollection}
         onPickFolder={vi.fn()}
         onScanFolder={vi.fn()}
         onCancelScan={vi.fn()}
@@ -122,12 +129,15 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
     await userEvent.click(screen.getByTitle("C:/assets"));
 
     expect(onSelectFolder).toHaveBeenCalledWith(1);
+    expect(onSelectCollection).not.toHaveBeenCalled();
   });
 
   it("clicking scan button does not trigger row selection", async () => {
@@ -153,6 +163,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -183,6 +195,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -212,6 +226,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -222,6 +238,7 @@ describe("LibrarySidebar", () => {
 
   it("shows collection names and calls onSelectCollection on click", async () => {
     const onSelectCollection = vi.fn();
+    const onSelectFolder = vi.fn();
     render(
       <LibrarySidebar
         folders={[]}
@@ -230,7 +247,7 @@ describe("LibrarySidebar", () => {
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
-        onSelectFolder={vi.fn()}
+        onSelectFolder={onSelectFolder}
         onSelectCollection={onSelectCollection}
         onPickFolder={vi.fn()}
         onScanFolder={vi.fn()}
@@ -242,6 +259,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -251,6 +270,7 @@ describe("LibrarySidebar", () => {
     await userEvent.click(screen.getByText("Heroes"));
 
     expect(onSelectCollection).toHaveBeenCalledWith(1);
+    expect(onSelectFolder).not.toHaveBeenCalled();
   });
 
   it("calls onCreateCollection when form is submitted with non-empty name", async () => {
@@ -275,6 +295,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -307,6 +329,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -343,6 +367,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -372,6 +398,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{ 1: { folder_id: 1, total: 12, missing: 3, is_accessible: true } }}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -400,6 +428,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{ 1: { folder_id: 1, total: 5, missing: 0, is_accessible: false } }}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -429,6 +459,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -461,6 +493,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -491,6 +525,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{ 1: { folder_id: 1, total: 12, missing: 2, is_accessible: true } }}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -527,6 +563,8 @@ describe("LibrarySidebar", () => {
         latestJobs={{}}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -578,6 +616,8 @@ describe("LibrarySidebar", () => {
         }}
         folderCounts={{}}
         settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
       />
     );
 
@@ -585,5 +625,36 @@ describe("LibrarySidebar", () => {
 
     expect(screen.getByRole("button", { name: "从资源库移除 Assets 的索引" })).toBeDisabled();
     expect(screen.getByText("扫描中，先取消扫描后再移除索引")).toBeInTheDocument();
+  });
+
+  it("shows collection asset counts and opens collection management", async () => {
+    render(
+      <LibrarySidebar
+        folders={[]}
+        collections={[{ id: 1, name: "角色", description: "", asset_count: 12 }]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("12")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "管理集合" }));
+    expect(screen.getByRole("dialog", { name: "集合管理" })).toBeInTheDocument();
   });
 });

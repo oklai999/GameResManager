@@ -78,6 +78,7 @@ pub struct Collection {
     pub id: i64,
     pub name: String,
     pub description: String,
+    pub asset_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

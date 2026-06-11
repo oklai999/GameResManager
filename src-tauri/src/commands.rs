@@ -148,6 +148,39 @@ pub async fn remove_asset_from_collection(
 }
 
 #[tauri::command]
+pub async fn update_collection(
+    db: State<'_, SqlitePool>,
+    collection_id: i64,
+    name: String,
+    description: String,
+) -> Result<crate::models::Collection, CommandError> {
+    db::update_collection(&*db, collection_id, &name, &description)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn remove_assets_from_collection(
+    db: State<'_, SqlitePool>,
+    collection_id: i64,
+    asset_ids: Vec<i64>,
+) -> Result<(), CommandError> {
+    db::remove_assets_from_collection(&*db, collection_id, &asset_ids)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn delete_collection(
+    db: State<'_, SqlitePool>,
+    collection_id: i64,
+) -> Result<bool, CommandError> {
+    db::delete_collection(&*db, collection_id)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn list_collection_assets(
     db: State<'_, SqlitePool>,
     collection_id: i64,

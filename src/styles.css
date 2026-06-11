@@ -753,6 +753,23 @@ body {
   color: #d8deea;
 }
 
+.collection-remove-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #2a171c;
+  border: 1px solid #6d3540;
+  color: #ff9aa8;
+  cursor: pointer;
+  font-size: 12px;
+  width: auto;
+  margin-top: 0;
+}
+
+.collection-remove-btn:hover {
+  background: #3f1a1a;
+  border-color: #7f2a2a;
+}
+
 .note-textarea {
   width: 100%;
   border: 1px solid #2d3447;
@@ -895,4 +912,112 @@ body {
 .asset-grid-spacer {
   position: relative;
   min-width: 100%;
+}
+
+.collection-count {
+  margin-left: auto;
+  color: #7f899d;
+  font-size: 11px;
+}
+
+.collection-manager-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 12, 0.72);
+}
+
+.collection-manager-panel {
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(680px, calc(100vh - 48px));
+  overflow: auto;
+  border: 1px solid #2b3242;
+  border-radius: 10px;
+  background: #151922;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+}
+
+.collection-manager-header,
+.collection-manager-actions,
+.collection-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collection-manager-header {
+  justify-content: space-between;
+  padding: 18px;
+  border-bottom: 1px solid #2b3242;
+}
+
+.collection-manager-header h2,
+.collection-manager-header p {
+  margin: 0;
+}
+
+.collection-manager-header p {
+  margin-top: 6px;
+  color: #8d96a8;
+  font-size: 12px;
+}
+
+.collection-manager-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 360px;
+}
+
+.collection-manager-list {
+  padding: 12px;
+  border-right: 1px solid #2b3242;
+}
+
+.collection-manager-list button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  padding: 9px 10px;
+}
+
+.collection-manager-list button.active {
+  background: #273149;
+}
+
+.collection-manager-form {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 18px;
+}
+
+.collection-manager-form label {
+  display: grid;
+  gap: 6px;
+  color: #aeb7c7;
+  font-size: 12px;
+}
+
+.collection-manager-form input,
+.collection-manager-form textarea {
+  width: 100%;
+}
+
+.collection-delete-confirm {
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px solid #6d3540;
+  background: #2a171c;
+}
+
+.collection-delete-confirm p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+button.danger {
+  color: #ff9aa8;
+  border-color: #6d3540;
 }

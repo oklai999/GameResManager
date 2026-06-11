@@ -101,6 +101,25 @@ export async function removeAssetFromCollection(collectionId: number, assetId: n
   await invoke("remove_asset_from_collection", { collectionId, assetId });
 }
 
+export async function updateCollection(
+  collectionId: number,
+  name: string,
+  description: string
+): Promise<Collection> {
+  return invoke<Collection>("update_collection", { collectionId, name, description });
+}
+
+export async function removeAssetsFromCollection(
+  collectionId: number,
+  assetIds: number[]
+): Promise<void> {
+  await invoke("remove_assets_from_collection", { collectionId, assetIds });
+}
+
+export async function deleteCollection(collectionId: number): Promise<boolean> {
+  return invoke<boolean>("delete_collection", { collectionId });
+}
+
 export async function listCollectionAssets(collectionId: number): Promise<number[]> {
   return invoke<number[]>("list_collection_assets", { collectionId });
 }

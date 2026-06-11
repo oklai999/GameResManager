@@ -46,7 +46,7 @@ function makeAsset(id: number): Asset {
 }
 
 function makeCollection(id: number, name: string): Collection {
-  return { id, name, description: "" };
+  return { id, name, description: "", asset_count: 0 };
 }
 
 describe("DetailsPanel", () => {
@@ -61,6 +61,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={[]}
         onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -78,6 +80,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={[]}
         onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -99,6 +103,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={[]}
         onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -120,6 +126,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={[]}
         onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -138,6 +146,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={[]}
         onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -164,6 +174,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={collections}
         onAddToCollection={onAddToCollection}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -188,6 +200,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         collections={collections}
         onAddToCollection={onAddToCollection}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -210,6 +224,8 @@ describe("DetailsPanel", () => {
         onApplyTag={vi.fn()}
         onToggleFavorite={vi.fn()}
         onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -229,6 +245,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -251,6 +269,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         onAddToCollection={vi.fn()}
         onCopyText={onCopyText}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -270,6 +290,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -298,6 +320,8 @@ describe("DetailsPanel", () => {
         collections={[]}
         onAddToCollection={vi.fn()}
         onUpdateNote={onUpdateNote}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -326,6 +350,8 @@ describe("DetailsPanel", () => {
         onToggleFavorite={vi.fn()}
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -357,6 +383,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         onCopyText={onCopyText}
         projectRoot="C:/project"
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -388,6 +416,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
         projectRoot="C:/project"
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -408,6 +438,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
         projectRoot="C:/project"
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -440,6 +472,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
         projectRoot="C:/project"
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
@@ -457,11 +491,79 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         onCopyText={vi.fn()}
         projectRoot="C:/other"
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
       />
     );
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "复制 res:// 路径" })).not.toBeInTheDocument();
     });
+  });
+
+  it("shows remove-from-collection button in single mode when activeCollectionId is set", async () => {
+    const onRemoveFromCollection = vi.fn();
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[makeCollection(1, "Heroes")]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={1}
+        onRemoveFromCollection={onRemoveFromCollection}
+      />
+    );
+
+    const btn = await screen.findByRole("button", { name: "从当前集合移出" });
+    await userEvent.click(btn);
+
+    expect(onRemoveFromCollection).toHaveBeenCalledWith(1, [1]);
+  });
+
+  it("shows batch remove-from-collection button in batch mode when activeCollectionId is set", async () => {
+    const onRemoveFromCollection = vi.fn();
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1), makeAsset(2)]}
+        collections={[makeCollection(1, "Heroes")]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={1}
+        onRemoveFromCollection={onRemoveFromCollection}
+      />
+    );
+
+    const btn = await screen.findByRole("button", { name: "从当前集合移出 2 个资源" });
+    await userEvent.click(btn);
+
+    expect(onRemoveFromCollection).toHaveBeenCalledWith(1, [1, 2]);
+  });
+
+  it("does not show remove-from-collection button when activeCollectionId is null", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[makeCollection(1, "Heroes")]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("1.png")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "从当前集合移出" })).not.toBeInTheDocument();
   });
 });

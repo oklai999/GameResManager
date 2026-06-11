@@ -15,6 +15,7 @@ import {
   Type,
   X,
 } from "lucide-react";
+import { CollectionManager } from "./CollectionManager";
 import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob } from "../types/asset";
 
 type Props = {
@@ -32,6 +33,8 @@ type Props = {
   onDeleteFolder: (folderId: number) => void;
   onOpenFolder: (folder: LibraryFolder) => void;
   onCreateCollection: (name: string) => void;
+  onUpdateCollection: (collectionId: number, name: string, description: string) => void;
+  onDeleteCollection: (collectionId: number) => void;
   isScanning: boolean;
   latestJobs: Record<number, ScanJob | null>;
   folderCounts: Record<number, FolderAssetCounts>;
@@ -51,10 +54,11 @@ function formatDateTime(iso: string | null): string {
 export function LibrarySidebar({
   folders, collections, activeFilter, selectedFolderId, selectedCollectionId,
   onFilterChange, onSelectFolder, onSelectCollection, onPickFolder, onScanFolder,
-  onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, isScanning, latestJobs, folderCounts, settingsPanel,
+  onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, onUpdateCollection, onDeleteCollection, isScanning, latestJobs, folderCounts, settingsPanel,
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
   const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
+  const [isCollectionManagerOpen, setIsCollectionManagerOpen] = useState(false);
   const filters = [
     { id: "all", label: "全部资源", icon: List },
     { id: "recent", label: "最近使用", icon: RotateCw },
@@ -93,10 +97,7 @@ export function LibrarySidebar({
           <button
             key={filter.id}
             className={activeFilter === filter.id ? "nav-item active" : "nav-item"}
-            onClick={() => {
-              onFilterChange(filter.id);
-              onSelectCollection(null);
-            }}
+            onClick={() => onFilterChange(filter.id)}
           >
             <Icon size={15} aria-hidden="true" />
             <span>{filter.label}</span>
@@ -133,10 +134,7 @@ export function LibrarySidebar({
               className={isSelected ? "folder-row active" : "folder-row"}
               key={folder.id}
               title={folder.path}
-              onClick={() => {
-                onSelectFolder(isSelected ? null : folder.id);
-                onSelectCollection(null);
-              }}
+              onClick={() => onSelectFolder(isSelected ? null : folder.id)}
             >
               <div className="folder-row-header">
                 <span className="folder-name"><Folder size={14} aria-hidden="true" />{folder.name}</span>
@@ -286,7 +284,17 @@ export function LibrarySidebar({
         </div>
       )}
 
-      <div className="panel-heading secondary">集合</div>
+      <div className="panel-heading secondary folder-section-heading">
+        <span>集合</span>
+        <button
+          type="button"
+          className="folder-manager-open-btn"
+          onClick={() => setIsCollectionManagerOpen(true)}
+          aria-label="管理集合"
+        >
+          管理
+        </button>
+      </div>
       <form className="folder-form" onSubmit={handleCreateCollection}>
         <input
           type="text"
@@ -304,16 +312,22 @@ export function LibrarySidebar({
               className={isSelected ? "folder-row active" : "folder-row"}
               key={col.id}
               title={col.description || col.name}
-              onClick={() => {
-                onSelectCollection(isSelected ? null : col.id);
-                onSelectFolder(null);
-              }}
+              onClick={() => onSelectCollection(isSelected ? null : col.id)}
             >
               <span className="folder-name"><List size={14} aria-hidden="true" />{col.name}</span>
+              <span className="collection-count">{col.asset_count}</span>
             </div>
           );
         })}
       </div>
+      {isCollectionManagerOpen && (
+        <CollectionManager
+          collections={collections}
+          onClose={() => setIsCollectionManagerOpen(false)}
+          onUpdate={onUpdateCollection}
+          onDelete={onDeleteCollection}
+        />
+      )}
       {settingsPanel}
     </aside>
   );

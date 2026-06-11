@@ -316,12 +316,20 @@ pub async fn list_common_tags(db: &Db, asset_ids: &[i64]) -> anyhow::Result<Vec<
 }
 
 pub async fn list_collections(db: &Db) -> anyhow::Result<Vec<crate::models::Collection>> {
-    let rows = sqlx::query_as::<_, crate::models::Collection>(
-        "SELECT id, name, description FROM collections ORDER BY name"
+    sqlx::query_as::<_, crate::models::Collection>(
+        "SELECT
+           c.id,
+           c.name,
+           c.description,
+           COUNT(ca.asset_id) AS asset_count
+         FROM collections c
+         LEFT JOIN collection_assets ca ON ca.collection_id = c.id
+         GROUP BY c.id, c.name, c.description
+         ORDER BY c.name COLLATE NOCASE, c.id",
     )
     .fetch_all(db)
-    .await?;
-    Ok(rows)
+    .await
+    .map_err(Into::into)
 }
 
 pub async fn create_collection(db: &Db, name: &str, description: &str) -> anyhow::Result<crate::models::Collection> {
@@ -332,7 +340,7 @@ pub async fn create_collection(db: &Db, name: &str, description: &str) -> anyhow
         "INSERT INTO collections (name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)"
     )
     .bind(name)
-    .bind(description)
+    .bind(description.trim())
     .bind(&now)
     .bind(&now)
     .execute(db)
@@ -340,8 +348,54 @@ pub async fn create_collection(db: &Db, name: &str, description: &str) -> anyhow
     Ok(crate::models::Collection {
         id: result.last_insert_rowid(),
         name: name.to_string(),
-        description: description.to_string(),
+        description: description.trim().to_string(),
+        asset_count: 0,
     })
+}
+
+pub async fn update_collection(
+    db: &Db,
+    collection_id: i64,
+    name: &str,
+    description: &str,
+) -> anyhow::Result<crate::models::Collection> {
+    let name = name.trim();
+    let description = description.trim();
+    anyhow::ensure!(!name.is_empty(), "collection name cannot be empty");
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let mut tx = db.begin().await?;
+
+    let result = sqlx::query(
+        "UPDATE collections
+         SET name = ?1, description = ?2, updated_at = ?3
+         WHERE id = ?4",
+    )
+    .bind(name)
+    .bind(description)
+    .bind(&now)
+    .bind(collection_id)
+    .execute(&mut *tx)
+    .await?;
+    anyhow::ensure!(result.rows_affected() == 1, "collection not found");
+
+    let collection = sqlx::query_as::<_, crate::models::Collection>(
+        "SELECT
+           c.id,
+           c.name,
+           c.description,
+           COUNT(ca.asset_id) AS asset_count
+         FROM collections c
+         LEFT JOIN collection_assets ca ON ca.collection_id = c.id
+         WHERE c.id = ?1
+         GROUP BY c.id, c.name, c.description",
+    )
+    .bind(collection_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(collection)
 }
 
 pub async fn add_assets_to_collection(db: &Db, collection_id: i64, asset_ids: &[i64]) -> anyhow::Result<()> {
@@ -363,13 +417,58 @@ pub async fn add_assets_to_collection(db: &Db, collection_id: i64, asset_ids: &[
     Ok(())
 }
 
-pub async fn remove_asset_from_collection(db: &Db, collection_id: i64, asset_id: i64) -> anyhow::Result<()> {
-    sqlx::query("DELETE FROM collection_assets WHERE collection_id = ?1 AND asset_id = ?2")
+pub async fn remove_assets_from_collection(
+    db: &Db,
+    collection_id: i64,
+    asset_ids: &[i64],
+) -> anyhow::Result<()> {
+    let mut tx = db.begin().await?;
+
+    let collection_exists: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM collections WHERE id = ?1"
+    )
+    .bind(collection_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    anyhow::ensure!(collection_exists.0 == 1, "collection not found");
+
+    let mut total_deleted: u64 = 0;
+    for asset_id in asset_ids {
+        let result = sqlx::query(
+            "DELETE FROM collection_assets
+             WHERE collection_id = ?1 AND asset_id = ?2",
+        )
         .bind(collection_id)
         .bind(asset_id)
+        .execute(&mut *tx)
+        .await?;
+        total_deleted += result.rows_affected();
+    }
+
+    if total_deleted > 0 {
+        sqlx::query(
+            "UPDATE collections SET updated_at = ?1 WHERE id = ?2",
+        )
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(collection_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn remove_asset_from_collection(db: &Db, collection_id: i64, asset_id: i64) -> anyhow::Result<()> {
+    remove_assets_from_collection(db, collection_id, &[asset_id]).await
+}
+
+pub async fn delete_collection(db: &Db, collection_id: i64) -> anyhow::Result<bool> {
+    let result = sqlx::query("DELETE FROM collections WHERE id = ?1")
+        .bind(collection_id)
         .execute(db)
         .await?;
-    Ok(())
+    Ok(result.rows_affected() == 1)
 }
 
 pub async fn list_collection_assets(db: &Db, collection_id: i64) -> anyhow::Result<Vec<i64>> {
@@ -897,10 +996,18 @@ mod collections_tests {
     use super::*;
 
     async fn setup_db() -> Db {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let options = SqliteConnectOptions::new()
+            .filename(":memory:")
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
         sqlx::query("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
             .execute(&pool).await.unwrap();
-        sqlx::query("CREATE TABLE collection_assets (collection_id INTEGER NOT NULL, asset_id INTEGER NOT NULL, PRIMARY KEY (collection_id, asset_id))")
+        sqlx::query("CREATE TABLE assets (id INTEGER PRIMARY KEY)").execute(&pool).await.unwrap();
+        sqlx::query("CREATE TABLE collection_assets (collection_id INTEGER NOT NULL, asset_id INTEGER NOT NULL, PRIMARY KEY (collection_id, asset_id), FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE, FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE)")
             .execute(&pool).await.unwrap();
         pool
     }
@@ -951,6 +1058,7 @@ mod collections_tests {
     #[tokio::test]
     async fn add_and_list_collection_assets() {
         let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2), (3)").execute(&db).await.unwrap();
         let col = create_collection(&db, "Test", "").await.unwrap();
         add_assets_to_collection(&db, col.id, &[1, 2, 3]).await.unwrap();
         let ids = list_collection_assets(&db, col.id).await.unwrap();
@@ -963,6 +1071,7 @@ mod collections_tests {
     #[tokio::test]
     async fn add_duplicate_assets_is_idempotent() {
         let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2), (3)").execute(&db).await.unwrap();
         let col = create_collection(&db, "Test", "").await.unwrap();
         add_assets_to_collection(&db, col.id, &[1, 2]).await.unwrap();
         add_assets_to_collection(&db, col.id, &[1, 3]).await.unwrap();
@@ -973,11 +1082,214 @@ mod collections_tests {
     #[tokio::test]
     async fn remove_asset_from_collection_works() {
         let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2)").execute(&db).await.unwrap();
         let col = create_collection(&db, "Test", "").await.unwrap();
         add_assets_to_collection(&db, col.id, &[1, 2]).await.unwrap();
         remove_asset_from_collection(&db, col.id, 1).await.unwrap();
         let ids = list_collection_assets(&db, col.id).await.unwrap();
         assert_eq!(ids, vec![2]);
+    }
+
+    #[tokio::test]
+    async fn list_collections_includes_asset_count() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2), (3)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        add_assets_to_collection(&db, collection.id, &[1, 2, 3])
+            .await
+            .unwrap();
+
+        let rows = list_collections(&db).await.unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].asset_count, 3);
+    }
+
+    #[tokio::test]
+    async fn update_collection_trims_name_and_description() {
+        let db = setup_db().await;
+        let collection = create_collection(&db, "旧名称", "").await.unwrap();
+
+        let updated = update_collection(
+            &db,
+            collection.id,
+            "  新名称  ",
+            "  常用角色素材  ",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(updated.name, "新名称");
+        assert_eq!(updated.description, "常用角色素材");
+        assert_eq!(updated.asset_count, 0);
+    }
+
+    #[tokio::test]
+    async fn update_collection_rejects_blank_name() {
+        let db = setup_db().await;
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+
+        let error = update_collection(&db, collection.id, "   ", "")
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("collection name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn remove_assets_from_collection_is_idempotent() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2), (3)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        add_assets_to_collection(&db, collection.id, &[1, 2, 3])
+            .await
+            .unwrap();
+
+        remove_assets_from_collection(&db, collection.id, &[2, 3, 99])
+            .await
+            .unwrap();
+
+        assert_eq!(list_collection_assets(&db, collection.id).await.unwrap(), vec![1]);
+    }
+
+    #[tokio::test]
+    async fn delete_collection_removes_links_but_not_assets() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        add_assets_to_collection(&db, collection.id, &[1, 2])
+            .await
+            .unwrap();
+
+        assert!(delete_collection(&db, collection.id).await.unwrap());
+
+        let asset_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM assets")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let link_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM collection_assets")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(asset_count, 2);
+        assert_eq!(link_count, 0);
+    }
+
+    #[tokio::test]
+    async fn remove_assets_from_collection_empty_ids_existing_collection_succeeds() {
+        let db = setup_db().await;
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        remove_assets_from_collection(&db, collection.id, &[])
+            .await
+            .unwrap();
+        let ids = list_collection_assets(&db, collection.id).await.unwrap();
+        assert!(ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn remove_assets_from_collection_empty_ids_missing_collection_errors() {
+        let db = setup_db().await;
+        let err = remove_assets_from_collection(&db, 9999, &[])
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("collection not found"));
+    }
+
+    #[tokio::test]
+    async fn remove_assets_from_collection_non_empty_ids_missing_collection_errors() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let err = remove_assets_from_collection(&db, 9999, &[1])
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("collection not found"));
+    }
+
+    #[tokio::test]
+    async fn remove_assets_from_collection_idempotent_does_not_update_updated_at_twice() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        add_assets_to_collection(&db, collection.id, &[1])
+            .await
+            .unwrap();
+
+        let before: String = sqlx::query_scalar("SELECT updated_at FROM collections WHERE id = ?1")
+            .bind(collection.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+
+        remove_assets_from_collection(&db, collection.id, &[1])
+            .await
+            .unwrap();
+        let after_first: String = sqlx::query_scalar("SELECT updated_at FROM collections WHERE id = ?1")
+            .bind(collection.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_ne!(before, after_first);
+
+        remove_assets_from_collection(&db, collection.id, &[1])
+            .await
+            .unwrap();
+        let after_second: String = sqlx::query_scalar("SELECT updated_at FROM collections WHERE id = ?1")
+            .bind(collection.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(after_first, after_second);
+    }
+
+    #[tokio::test]
+    async fn collection_assets_foreign_key_enforced() {
+        let db = setup_db().await;
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        let result = sqlx::query(
+            "INSERT INTO collection_assets (collection_id, asset_id) VALUES (?1, ?2)",
+        )
+        .bind(collection.id)
+        .bind(999)
+        .execute(&db)
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn update_collection_returns_accurate_asset_count() {
+        let db = setup_db().await;
+        sqlx::query("INSERT INTO assets (id) VALUES (1), (2)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let collection = create_collection(&db, "角色", "").await.unwrap();
+        add_assets_to_collection(&db, collection.id, &[1, 2])
+            .await
+            .unwrap();
+
+        let updated = update_collection(&db, collection.id, "主角", "常用角色素材")
+            .await
+            .unwrap();
+
+        assert_eq!(updated.name, "主角");
+        assert_eq!(updated.description, "常用角色素材");
+        assert_eq!(updated.asset_count, 2);
     }
 }
 

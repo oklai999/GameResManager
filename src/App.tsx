@@ -5,6 +5,7 @@ import {
   cancelScan,
   createCollection,
   createLibraryFolderFromPath,
+  deleteCollection,
   deleteLibraryFolder,
   getFolderAssetCounts,
   getScanSettings,
@@ -19,12 +20,14 @@ import {
   openLibraryFolder,
   pickLibraryFolder,
   recordRecentAssetAction,
+  removeAssetsFromCollection,
   revealAssetInFolder,
   saveScanSettings,
   searchAssetsPage,
   setAssetFavorite,
   startScan,
   updateAssetNote,
+  updateCollection,
 } from "./api/tauri";
 import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
@@ -413,14 +416,91 @@ function AppInner() {
     }
   }, [showError]);
 
-  const handleAddToCollection = useCallback(async (collectionId: number, assetIds: number[]) => {
-    try {
-      await addAssetsToCollection(collectionId, assetIds);
-      await executeSearch();
-    } catch (e) {
-      showError(e);
-    }
-  }, [executeSearch, showError]);
+  const handleAddToCollection = useCallback(
+    async (collectionId: number, assetIds: number[]) => {
+      try {
+        await addAssetsToCollection(collectionId, assetIds);
+        const collectionList = await listCollections();
+        setCollections(collectionList);
+        await executeSearch();
+        showToast("已加入集合", "success");
+      } catch (e) {
+        showError(e);
+      }
+    },
+    [executeSearch, showError, showToast]
+  );
+
+  const handleUpdateCollection = useCallback(
+    async (
+      collectionId: number,
+      name: string,
+      description: string
+    ) => {
+      try {
+        const updated = await updateCollection(
+          collectionId,
+          name,
+          description
+        );
+        setCollections((previous) =>
+          previous
+            .map((collection) =>
+              collection.id === updated.id ? updated : collection
+            )
+            .sort((left, right) => left.name.localeCompare(right.name))
+        );
+        showToast("集合已保存", "success");
+      } catch (e) {
+        showError(e);
+      }
+    },
+    [showError, showToast]
+  );
+
+  const handleDeleteCollection = useCallback(
+    async (collectionId: number) => {
+      try {
+        const deleted = await deleteCollection(collectionId);
+        if (!deleted) {
+          showToast("集合不存在或已删除", "error");
+          return;
+        }
+        setCollections((previous) =>
+          previous.filter((collection) => collection.id !== collectionId)
+        );
+        if (selectedCollectionId === collectionId) {
+          setSelectedCollectionId(null);
+          setSelectedIds([]);
+        }
+        showToast("集合已删除，原始素材未改动", "success");
+      } catch (e) {
+        showError(e);
+      }
+    },
+    [selectedCollectionId, showError, showToast]
+  );
+
+  const handleRemoveFromCollection = useCallback(
+    async (collectionId: number, assetIds: number[]) => {
+      try {
+        await removeAssetsFromCollection(collectionId, assetIds);
+        const collectionList = await listCollections();
+        setCollections(collectionList);
+        setSelectedIds([]);
+        await executeSearch();
+        showToast(
+          assetIds.length > 1
+            ? `已从集合移出 ${assetIds.length} 个资源`
+            : "已从集合移出资源",
+          "success"
+        );
+      } catch (e) {
+        showError(e);
+      }
+    },
+    [executeSearch, showError, showToast]
+  );
 
   const handleUpdateNote = useCallback((updated: Asset) => {
     setAssets((prev) => prev.map((a) => (a.id === updated.id ? { ...a, note: updated.note } : a)));
@@ -528,6 +608,8 @@ function AppInner() {
         onDeleteFolder={handleDeleteFolder}
         onOpenFolder={handleOpenFolder}
         onCreateCollection={handleCreateCollection}
+        onUpdateCollection={handleUpdateCollection}
+        onDeleteCollection={handleDeleteCollection}
         isScanning={isScanning}
         latestJobs={latestJobs}
         folderCounts={folderCounts}
@@ -600,6 +682,8 @@ function AppInner() {
         onToggleFavorite={handleToggleFavorite}
         onAddToCollection={handleAddToCollection}
         onUpdateNote={handleUpdateNote}
+        activeCollectionId={selectedCollectionId}
+        onRemoveFromCollection={handleRemoveFromCollection}
         recentTags={recentTags}
         onCopyText={handleCopyText}
         projectRoot={projectRoot}

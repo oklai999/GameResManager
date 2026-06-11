@@ -20,6 +20,8 @@ type Props = {
   onCopyText?: (text: string) => void;
   projectRoot?: string;
   onProjectRootChange?: (root: string) => void;
+  activeCollectionId: number | null;
+  onRemoveFromCollection: (collectionId: number, assetIds: number[]) => void;
 };
 
 function formatFileSize(bytes: number): string {
@@ -56,6 +58,8 @@ export function DetailsPanel({
   onCopyText,
   projectRoot,
   onProjectRootChange,
+  activeCollectionId,
+  onRemoveFromCollection,
 }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
@@ -158,6 +162,16 @@ export function DetailsPanel({
                 </button>
               ))}
             </div>
+          </section>
+        )}
+        {activeCollectionId != null && (
+          <section className="inspector-section">
+            <button
+              className="collection-remove-btn"
+              onClick={() => onRemoveFromCollection(activeCollectionId, ids)}
+            >
+              从当前集合移出 {selectedAssets.length} 个资源
+            </button>
           </section>
         )}
       </aside>
@@ -274,6 +288,16 @@ export function DetailsPanel({
               </button>
             ))}
           </div>
+        </section>
+      )}
+      {activeCollectionId != null && (
+        <section className="inspector-section">
+          <button
+            className="collection-remove-btn"
+            onClick={() => onRemoveFromCollection(activeCollectionId, [asset.id])}
+          >
+            从当前集合移出
+          </button>
         </section>
       )}
 
