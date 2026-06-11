@@ -1,5 +1,7 @@
 # After Task 39 Next Stage Implementation Plan
 
+**Progress Sync (2026-06-11):** Completed and verified. Selection UX and v0.3.1 Recent Activity are present in the current `0.7.0` codebase.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Complete the immediate post-task39 UX correction, then implement v0.3.1 Recent Activity so users can return to recently opened, revealed, and copied assets.
@@ -53,7 +55,7 @@
 - Modify: `I:\GameResManger\tests\smoke\README.md`
 - Modify: `G:\oklai999的策划仓库\游戏资源管理器\里程碑记录\2026-06-04-sharp-stock-reference-milestones.md`
 
-- [ ] **Step 1: Add failing selection tests**
+- [x] **Step 1: Add failing selection tests**
 
 Add these tests to `AssetGrid.test.tsx`:
 
@@ -132,7 +134,7 @@ it("removes an asset from multi-select when its checkbox is unchecked", async ()
 });
 ```
 
-- [ ] **Step 2: Verify tests fail for the current behavior**
+- [x] **Step 2: Verify tests fail for the current behavior**
 
 Run:
 
@@ -142,7 +144,7 @@ npm test -- src/components/AssetGrid.test.tsx
 
 Expected: at least the single-select replacement test fails until the card click and checkbox selection paths are separated.
 
-- [ ] **Step 3: Separate single-select and multi-select handlers**
+- [x] **Step 3: Separate single-select and multi-select handlers**
 
 In `AssetGrid.tsx`, replace the existing `toggle` handler with:
 
@@ -166,7 +168,7 @@ Change the card click to:
 onClick={() => selectOnly(asset.id)}
 ```
 
-- [ ] **Step 4: Add explicit checkbox UI**
+- [x] **Step 4: Add explicit checkbox UI**
 
 Add this input inside each `.asset-card`, before the thumbnail:
 
@@ -181,7 +183,7 @@ Add this input inside each `.asset-card`, before the thumbnail:
 />
 ```
 
-- [ ] **Step 5: Style the checkbox**
+- [x] **Step 5: Style the checkbox**
 
 Add compact CSS in `styles.css`:
 
@@ -210,7 +212,7 @@ If `.asset-card` is not already positioned, add:
 }
 ```
 
-- [ ] **Step 6: Add manual smoke checklist**
+- [x] **Step 6: Add manual smoke checklist**
 
 Append to `tests/smoke/README.md`:
 
@@ -225,7 +227,7 @@ Append to `tests/smoke/README.md`:
 - Confirm the favorite button does not change selection.
 ```
 
-- [ ] **Step 7: Run verification**
+- [x] **Step 7: Run verification**
 
 Run:
 
@@ -236,7 +238,7 @@ npm run build
 
 Expected: targeted tests pass and production build succeeds.
 
-- [ ] **Step 8: Update milestone tracker**
+- [x] **Step 8: Update milestone tracker**
 
 In the milestone tracker, set `v0.3.0 Follow-up Selection UX` to `Verified` and add completion evidence such as:
 
@@ -244,7 +246,7 @@ In the milestone tracker, set `v0.3.0 Follow-up Selection UX` to `Verified` and 
 | 2026-06-05 | v0.3.0 Follow-up Selection UX | Verified | `npm test -- src/components/AssetGrid.test.tsx`; `npm run build` | Card click is single-select; checkbox controls multi-select. |
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```powershell
 git add src/components/AssetGrid.tsx src/components/AssetGrid.test.tsx src/styles.css tests/smoke/README.md
@@ -262,7 +264,7 @@ If the planning repository at `G:\oklai999的策划仓库\游戏资源管理器`
 - Modify: `I:\GameResManger\src-tauri\src\models.rs`
 - Modify: `I:\GameResManger\src\types\asset.ts`
 
-- [ ] **Step 1: Create migration**
+- [x] **Step 1: Create migration**
 
 Create `src-tauri/migrations/0005_recent_asset_actions.sql`:
 
@@ -282,7 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_recent_asset_actions_asset_id
 ON recent_asset_actions(asset_id);
 ```
 
-- [ ] **Step 2: Add Rust model**
+- [x] **Step 2: Add Rust model**
 
 Add to `models.rs`:
 
@@ -296,7 +298,7 @@ pub struct RecentAssetAction {
 }
 ```
 
-- [ ] **Step 3: Add TypeScript model**
+- [x] **Step 3: Add TypeScript model**
 
 Add to `asset.ts`:
 
@@ -309,7 +311,7 @@ export type RecentAssetAction = {
 };
 ```
 
-- [ ] **Step 4: Run checks**
+- [x] **Step 4: Run checks**
 
 Run:
 
@@ -322,7 +324,7 @@ npm run build
 
 Expected: Rust and TypeScript compile.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src-tauri/migrations/0005_recent_asset_actions.sql src-tauri/src/models.rs src/types/asset.ts
@@ -338,7 +340,7 @@ git commit -m "feat: add recent asset action model"
 - Modify: `I:\GameResManger\src-tauri\src\commands.rs`
 - Modify: `I:\GameResManger\src-tauri\src\lib.rs`
 
-- [ ] **Step 1: Add repository tests**
+- [x] **Step 1: Add repository tests**
 
 Add a test in the existing `db.rs` tests module. Follow the local helper style already present in that file, but keep these assertions:
 
@@ -358,7 +360,7 @@ async fn records_recent_asset_action() {
 }
 ```
 
-- [ ] **Step 2: Implement repository functions**
+- [x] **Step 2: Implement repository functions**
 
 Add to `db.rs`:
 
@@ -397,7 +399,7 @@ pub async fn list_recent_asset_actions(
 }
 ```
 
-- [ ] **Step 3: Add commands**
+- [x] **Step 3: Add commands**
 
 Add to `commands.rs`:
 
@@ -435,7 +437,7 @@ pub async fn list_recent_asset_actions(
 
 Register both commands in `lib.rs`.
 
-- [ ] **Step 4: Run backend checks**
+- [x] **Step 4: Run backend checks**
 
 Run:
 
@@ -447,7 +449,7 @@ cargo check
 
 Expected: test and check pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src-tauri/src/db.rs src-tauri/src/commands.rs src-tauri/src/lib.rs
@@ -466,7 +468,7 @@ git commit -m "feat: record recent asset actions"
 - Modify: `I:\GameResManger\tests\smoke\README.md`
 - Modify: `G:\oklai999的策划仓库\游戏资源管理器\里程碑记录\2026-06-04-sharp-stock-reference-milestones.md`
 
-- [ ] **Step 1: Add API wrappers**
+- [x] **Step 1: Add API wrappers**
 
 In `src/api/tauri.ts`, import `RecentAssetAction` and add:
 
@@ -483,7 +485,7 @@ export async function listRecentAssetActions(limit: number): Promise<RecentAsset
 }
 ```
 
-- [ ] **Step 2: Add sidebar test**
+- [x] **Step 2: Add sidebar test**
 
 Add to `LibrarySidebar.test.tsx`:
 
@@ -495,7 +497,7 @@ it("shows recent activity filter", () => {
 });
 ```
 
-- [ ] **Step 3: Add sidebar filter**
+- [x] **Step 3: Add sidebar filter**
 
 In `LibrarySidebar.tsx`, add a filter item near the top filters:
 
@@ -503,7 +505,7 @@ In `LibrarySidebar.tsx`, add a filter item near the top filters:
 { id: "recent", label: "最近使用", icon: RotateCw },
 ```
 
-- [ ] **Step 4: Wire App state**
+- [x] **Step 4: Wire App state**
 
 In `App.tsx`, add:
 
@@ -542,11 +544,11 @@ const displayAssets =
     : gridAssets;
 ```
 
-- [ ] **Step 5: Keep failures non-blocking**
+- [x] **Step 5: Keep failures non-blocking**
 
 If recording recent activity fails after the file action succeeds, show a toast or console-safe error consistent with existing `App.tsx` error handling, but do not undo the file action.
 
-- [ ] **Step 6: Add manual smoke checklist**
+- [x] **Step 6: Add manual smoke checklist**
 
 Append to `tests/smoke/README.md`:
 
@@ -561,7 +563,7 @@ Append to `tests/smoke/README.md`:
 - Confirm these actions do not delete, move, rename, or modify source files.
 ```
 
-- [ ] **Step 7: Run frontend checks**
+- [x] **Step 7: Run frontend checks**
 
 Run:
 
@@ -572,7 +574,7 @@ npm run build
 
 Expected: test and build pass.
 
-- [ ] **Step 8: Run backend and full checks**
+- [x] **Step 8: Run backend and full checks**
 
 Run:
 
@@ -587,7 +589,7 @@ npm run build
 
 Expected: all automated checks pass. If `cargo` fails because of local MSVC or Windows SDK setup, record the exact environment failure and keep frontend checks as completed evidence.
 
-- [ ] **Step 9: Update milestone tracker**
+- [x] **Step 9: Update milestone tracker**
 
 Set `v0.3.1 Recent Activity` to `Verified` and add completion evidence:
 
@@ -595,7 +597,7 @@ Set `v0.3.1 Recent Activity` to `Verified` and add completion evidence:
 | 2026-06-05 | v0.3.1 Recent Activity | Verified | `cargo test`; `cargo check`; `npm test`; `npm run build` | Recent open/reveal/copy actions are recorded locally and exposed through `最近使用`. |
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```powershell
 git add src/api/tauri.ts src/App.tsx src/components/LibrarySidebar.tsx src/components/LibrarySidebar.test.tsx tests/smoke/README.md

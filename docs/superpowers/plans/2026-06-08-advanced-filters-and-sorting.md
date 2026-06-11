@@ -1,5 +1,7 @@
 # Advanced Filters And Sorting Implementation Plan
 
+**Progress Sync (2026-06-11):** Completed and verified. Tasks 54-59 are implemented in the current `0.7.0` codebase.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add first-class file size, dimension, modified-time filters and stable sorting controls so users can narrow large local asset libraries more precisely.
@@ -69,7 +71,7 @@
 - Modify: `I:\GameResManger\src-tauri\src\models.rs`
 - Modify: `I:\GameResManger\src\types\asset.ts`
 
-- [ ] **Step 1: Add Rust request fields**
+- [x] **Step 1: Add Rust request fields**
 
 In `src-tauri/src/models.rs`, replace `AssetSearchRequest` with:
 
@@ -101,7 +103,7 @@ pub struct AssetSearchRequest {
 }
 ```
 
-- [ ] **Step 2: Add TypeScript search helper types**
+- [x] **Step 2: Add TypeScript search helper types**
 
 In `src/types/asset.ts`, replace `AssetSearchRequest` with:
 
@@ -152,7 +154,7 @@ export type AssetSearchRequest = {
 };
 ```
 
-- [ ] **Step 3: Update Rust test helper to compile**
+- [x] **Step 3: Update Rust test helper to compile**
 
 In `src-tauri/src/search.rs`, update `empty_request()` so every new field is set:
 
@@ -185,7 +187,7 @@ fn empty_request() -> AssetSearchRequest {
 }
 ```
 
-- [ ] **Step 4: Run contract checks**
+- [x] **Step 4: Run contract checks**
 
 Run:
 
@@ -198,7 +200,7 @@ npm run build
 
 Expected: Rust and TypeScript may fail until all request construction sites are updated in later tasks. If they fail only because new fields are missing in `App.tsx` or search tests, proceed to the next task before finalizing this slice.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 After Task 55 and Task 56 make both compilers pass, commit this task together with those dependent changes if needed:
 
@@ -214,7 +216,7 @@ git commit -m "feat: extend asset search contract"
 **Files:**
 - Modify: `I:\GameResManger\src-tauri\src\search.rs`
 
-- [ ] **Step 1: Add focused backend tests**
+- [x] **Step 1: Add focused backend tests**
 
 Add these tests inside the existing `#[cfg(test)] mod tests` in `src-tauri/src/search.rs`:
 
@@ -268,7 +270,7 @@ async fn invalid_sort_values_fall_back_to_file_name_ascending() {
 }
 ```
 
-- [ ] **Step 2: Add test fixture helper**
+- [x] **Step 2: Add test fixture helper**
 
 Add this helper in the same test module:
 
@@ -347,7 +349,7 @@ async fn search_test_pool() -> SqlitePool {
 }
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -358,7 +360,7 @@ cargo test search::tests
 
 Expected: fail until filters and sorting are implemented.
 
-- [ ] **Step 4: Add backend filter conditions**
+- [x] **Step 4: Add backend filter conditions**
 
 In `search_assets`, after existing favorite/missing conditions, add:
 
@@ -386,7 +388,7 @@ if let Some(ref v) = req.modified_after { query = query.bind(v); }
 if let Some(ref v) = req.modified_before { query = query.bind(v); }
 ```
 
-- [ ] **Step 5: Replace fixed ordering with whitelisted ordering**
+- [x] **Step 5: Replace fixed ordering with whitelisted ordering**
 
 Replace:
 
@@ -414,7 +416,7 @@ sql.push_str(&format!(
 ));
 ```
 
-- [ ] **Step 6: Update existing integration request literals**
+- [x] **Step 6: Update existing integration request literals**
 
 Every `AssetSearchRequest { ... }` literal in `search.rs` tests must include:
 
@@ -431,7 +433,7 @@ sort_by: "file_name".to_string(),
 sort_direction: "asc".to_string(),
 ```
 
-- [ ] **Step 7: Run backend verification**
+- [x] **Step 7: Run backend verification**
 
 Run:
 
@@ -443,7 +445,7 @@ cargo check
 
 Expected: all search tests pass and backend compiles cleanly.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add src-tauri/src/models.rs src-tauri/src/search.rs
@@ -458,7 +460,7 @@ git commit -m "feat: add asset search filters and sorting"
 - Modify: `I:\GameResManger\src\types\asset.ts`
 - Modify: `I:\GameResManger\src\App.tsx`
 
-- [ ] **Step 1: Add default state helpers in App**
+- [x] **Step 1: Add default state helpers in App**
 
 In `src/App.tsx`, update the type import:
 
@@ -497,7 +499,7 @@ const DEFAULT_SEARCH_SORT: AssetSearchSort = {
 };
 ```
 
-- [ ] **Step 2: Add state in AppInner**
+- [x] **Step 2: Add state in AppInner**
 
 Add state next to `query` and `scope`:
 
@@ -506,7 +508,7 @@ const [filters, setFilters] = useState<AssetSearchFilters>(DEFAULT_SEARCH_FILTER
 const [sort, setSort] = useState<AssetSearchSort>(DEFAULT_SEARCH_SORT);
 ```
 
-- [ ] **Step 3: Include fields in search request**
+- [x] **Step 3: Include fields in search request**
 
 In `executeSearch`, add these fields to `req`:
 
@@ -525,7 +527,7 @@ sort_direction: sort.sort_direction,
 
 Add `filters` and `sort` to the `executeSearch` dependency list.
 
-- [ ] **Step 4: Reset selection when filters or sort change**
+- [x] **Step 4: Reset selection when filters or sort change**
 
 Add callbacks:
 
@@ -541,7 +543,7 @@ const handleSortChange = useCallback((next: AssetSearchSort) => {
 }, []);
 ```
 
-- [ ] **Step 5: Run TypeScript build**
+- [x] **Step 5: Run TypeScript build**
 
 Run:
 
@@ -560,7 +562,7 @@ Expected: build may fail until `SearchToolbar` accepts the new props in Task 57.
 - Modify: `I:\GameResManger\src\components\SearchToolbar.test.tsx`
 - Modify: `I:\GameResManger\src\styles.css`
 
-- [ ] **Step 1: Update SearchToolbar props**
+- [x] **Step 1: Update SearchToolbar props**
 
 In `SearchToolbar.tsx`, update imports:
 
@@ -584,7 +586,7 @@ type Props = {
 };
 ```
 
-- [ ] **Step 2: Add toolbar helper functions**
+- [x] **Step 2: Add toolbar helper functions**
 
 Inside `SearchToolbar`, add:
 
@@ -627,7 +629,7 @@ function resetAdvancedFilters() {
 }
 ```
 
-- [ ] **Step 3: Add failing tests**
+- [x] **Step 3: Add failing tests**
 
 In `SearchToolbar.test.tsx`, update imports:
 
@@ -721,7 +723,7 @@ it("resets advanced filters", async () => {
 });
 ```
 
-- [ ] **Step 4: Run tests to verify failure**
+- [x] **Step 4: Run tests to verify failure**
 
 Run:
 
@@ -731,7 +733,7 @@ npm test -- src/components/SearchToolbar.test.tsx
 
 Expected: fail until controls are implemented.
 
-- [ ] **Step 5: Render compact controls**
+- [x] **Step 5: Render compact controls**
 
 Below the existing scope segments in `SearchToolbar.tsx`, add:
 
@@ -830,7 +832,7 @@ Below the existing scope segments in `SearchToolbar.tsx`, add:
 </div>
 ```
 
-- [ ] **Step 6: Style controls**
+- [x] **Step 6: Style controls**
 
 Add to `src/styles.css`:
 
@@ -879,7 +881,7 @@ Add to `src/styles.css`:
 }
 ```
 
-- [ ] **Step 7: Run frontend verification**
+- [x] **Step 7: Run frontend verification**
 
 Run:
 
@@ -890,7 +892,7 @@ npm run build
 
 Expected: focused tests pass and production build succeeds.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add src/components/SearchToolbar.tsx src/components/SearchToolbar.test.tsx src/styles.css
@@ -904,7 +906,7 @@ git commit -m "feat: add search filter and sort controls"
 **Files:**
 - Modify: `I:\GameResManger\src\App.tsx`
 
-- [ ] **Step 1: Pass props to SearchToolbar**
+- [x] **Step 1: Pass props to SearchToolbar**
 
 Replace the current `SearchToolbar` call with:
 
@@ -921,7 +923,7 @@ Replace the current `SearchToolbar` call with:
 />
 ```
 
-- [ ] **Step 2: Update empty-state filter detection**
+- [x] **Step 2: Update empty-state filter detection**
 
 Replace:
 
@@ -943,7 +945,7 @@ const showSearchEmpty =
 
 If `showSearchEmpty` is currently unused, either use it to select the no-results empty state or remove the variable in a separate focused cleanup commit after verifying no behavior changes are needed.
 
-- [ ] **Step 3: Ensure search request has all fields**
+- [x] **Step 3: Ensure search request has all fields**
 
 Confirm `req` includes:
 
@@ -960,7 +962,7 @@ sort_by: sort.sort_by,
 sort_direction: sort.sort_direction,
 ```
 
-- [ ] **Step 4: Run full frontend verification**
+- [x] **Step 4: Run full frontend verification**
 
 Run:
 
@@ -971,7 +973,7 @@ npm run build
 
 Expected: all frontend tests pass and production build succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/App.tsx src/types/asset.ts
@@ -985,7 +987,7 @@ git commit -m "feat: wire advanced asset search controls"
 **Files:**
 - Modify: `I:\GameResManger\tests\smoke\README.md`
 
-- [ ] **Step 1: Add manual smoke section**
+- [x] **Step 1: Add manual smoke section**
 
 Append this section to `tests/smoke/README.md`:
 
@@ -1006,7 +1008,7 @@ Append this section to `tests/smoke/README.md`:
 - Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
 ```
 
-- [ ] **Step 2: Run final automated verification**
+- [x] **Step 2: Run final automated verification**
 
 Run:
 
@@ -1025,7 +1027,7 @@ Expected:
 - All Rust tests pass.
 - Backend compiles with no errors.
 
-- [ ] **Step 3: Review working tree scope**
+- [x] **Step 3: Review working tree scope**
 
 Run:
 
@@ -1035,7 +1037,7 @@ git status --short
 
 Expected: changes are limited to the files in this plan plus existing unrelated dirty worktree entries. Do not stage unrelated release artifacts, unrelated deleted files, or unrelated untracked files.
 
-- [ ] **Step 4: Commit smoke documentation**
+- [x] **Step 4: Commit smoke documentation**
 
 ```powershell
 git add tests/smoke/README.md

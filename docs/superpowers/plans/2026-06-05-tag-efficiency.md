@@ -1,5 +1,7 @@
 # Tag Efficiency Implementation Plan
 
+**Progress Sync (2026-06-11):** Completed and verified. v0.3.2 recent-tag queries, suggestions, search, and batch-friendly tagging are present in the current `0.7.0` codebase.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Improve tag workflow speed by exposing recent tags, searchable suggestions, and batch-friendly tag application.
@@ -49,7 +51,7 @@
 - Modify: `I:\GameResManger\src-tauri\src\lib.rs`
 - Modify: `I:\GameResManger\src\api\tauri.ts`
 
-- [ ] **Step 1: Add repository tests**
+- [x] **Step 1: Add repository tests**
 
 Add this test module near existing `db.rs` tag or collection tests:
 
@@ -104,7 +106,7 @@ mod recent_tag_tests {
 }
 ```
 
-- [ ] **Step 2: Run the failing tests**
+- [x] **Step 2: Run the failing tests**
 
 Run:
 
@@ -115,7 +117,7 @@ cargo test recent_tag_tests
 
 Expected: fail because `list_recent_tags` does not exist yet.
 
-- [ ] **Step 3: Implement repository function**
+- [x] **Step 3: Implement repository function**
 
 Add to `db.rs`:
 
@@ -135,7 +137,7 @@ pub async fn list_recent_tags(db: &Db, limit: i64) -> anyhow::Result<Vec<crate::
 }
 ```
 
-- [ ] **Step 4: Add Tauri command**
+- [x] **Step 4: Add Tauri command**
 
 Add to `commands.rs`:
 
@@ -151,7 +153,7 @@ pub async fn list_recent_tags(
 
 Register `commands::list_recent_tags` in `src-tauri/src/lib.rs`.
 
-- [ ] **Step 5: Add frontend API wrapper**
+- [x] **Step 5: Add frontend API wrapper**
 
 Add to `src/api/tauri.ts`:
 
@@ -161,7 +163,7 @@ export async function listRecentTags(limit: number): Promise<Tag[]> {
 }
 ```
 
-- [ ] **Step 6: Run verification**
+- [x] **Step 6: Run verification**
 
 Run:
 
@@ -175,7 +177,7 @@ npm run build
 
 Expected: tests pass, backend compiles cleanly, frontend build succeeds.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add src-tauri/src/db.rs src-tauri/src/commands.rs src-tauri/src/lib.rs src/api/tauri.ts
@@ -190,7 +192,7 @@ git commit -m "feat: expose recent tags"
 - Modify: `I:\GameResManger\src\components\TagEditor.tsx`
 - Modify: `I:\GameResManger\src\components\TagEditor.test.tsx`
 
-- [ ] **Step 1: Update the API mock**
+- [x] **Step 1: Update the API mock**
 
 In `TagEditor.test.tsx`, change the mock so each test can control tags:
 
@@ -212,7 +214,7 @@ beforeEach(() => {
 });
 ```
 
-- [ ] **Step 2: Add failing behavior tests**
+- [x] **Step 2: Add failing behavior tests**
 
 Add these tests:
 
@@ -273,7 +275,7 @@ it("applies a suggested tag and clears the input", async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run:
 
@@ -283,7 +285,7 @@ npm test -- src/components/TagEditor.test.tsx
 
 Expected: fail until `recentTags` and suggestion behavior are implemented.
 
-- [ ] **Step 4: Update TagEditor props and suggestions**
+- [x] **Step 4: Update TagEditor props and suggestions**
 
 Change `TagEditor.tsx` props:
 
@@ -323,7 +325,7 @@ Use it in suggestion buttons:
 onClick={() => applySuggestion(tag)}
 ```
 
-- [ ] **Step 5: Run frontend verification**
+- [x] **Step 5: Run frontend verification**
 
 Run:
 
@@ -334,7 +336,7 @@ npm run build
 
 Expected: focused tests pass and production build succeeds.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/components/TagEditor.tsx src/components/TagEditor.test.tsx
@@ -350,7 +352,7 @@ git commit -m "feat: add tag suggestions"
 - Modify: `I:\GameResManger\src\components\DetailsPanel.tsx`
 - Modify: `I:\GameResManger\src\components\DetailsPanel.test.tsx`
 
-- [ ] **Step 1: Add DetailsPanel prop**
+- [x] **Step 1: Add DetailsPanel prop**
 
 In `DetailsPanel.tsx`, extend props:
 
@@ -376,7 +378,7 @@ and:
 <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, [asset.id])} />
 ```
 
-- [ ] **Step 2: Add App state and loader**
+- [x] **Step 2: Add App state and loader**
 
 In `App.tsx`, import `listRecentTags` from `./api/tauri`.
 
@@ -407,7 +409,7 @@ await loadRecentTags();
 
 Include `loadRecentTags` in the `loadData` dependency list.
 
-- [ ] **Step 3: Refresh recent tags after applying a tag**
+- [x] **Step 3: Refresh recent tags after applying a tag**
 
 In `handleApplyTag`, after `await loadData();`, add:
 
@@ -417,7 +419,7 @@ await loadRecentTags();
 
 This ensures a newly used tag appears at the front of suggestions.
 
-- [ ] **Step 4: Pass recent tags to DetailsPanel**
+- [x] **Step 4: Pass recent tags to DetailsPanel**
 
 Add:
 
@@ -427,7 +429,7 @@ recentTags={recentTags}
 
 to the `DetailsPanel` call in `App.tsx`.
 
-- [ ] **Step 5: Keep DetailsPanel tests compiling**
+- [x] **Step 5: Keep DetailsPanel tests compiling**
 
 If `DetailsPanel.test.tsx` creates shared props, add:
 
@@ -437,7 +439,7 @@ recentTags={["地形", "特效"]}
 
 where useful. If all tests still pass because the prop is optional, do not add unnecessary test noise.
 
-- [ ] **Step 6: Run verification**
+- [x] **Step 6: Run verification**
 
 Run:
 
@@ -448,7 +450,7 @@ npm run build
 
 Expected: tests pass and build succeeds.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add src/App.tsx src/components/DetailsPanel.tsx src/components/DetailsPanel.test.tsx
@@ -463,7 +465,7 @@ git commit -m "feat: wire recent tags into tag editor"
 - Modify: `I:\GameResManger\tests\smoke\README.md`
 - Modify: `G:\oklai999的策划仓库\游戏资源管理器\里程碑记录\2026-06-04-sharp-stock-reference-milestones.md`
 
-- [ ] **Step 1: Add smoke checklist**
+- [x] **Step 1: Add smoke checklist**
 
 Append to `tests/smoke/README.md`:
 
@@ -481,7 +483,7 @@ Append to `tests/smoke/README.md`:
 - Confirm no source file is deleted, moved, renamed, or modified.
 ```
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 Run:
 
@@ -495,7 +497,7 @@ cargo check
 
 Expected: frontend tests pass, frontend build succeeds, Rust tests pass, backend compiles cleanly.
 
-- [ ] **Step 3: Update milestone tracker**
+- [x] **Step 3: Update milestone tracker**
 
 Set `v0.3.2 Tag Efficiency` to `Verified` in the milestone board and add:
 
@@ -503,7 +505,7 @@ Set `v0.3.2 Tag Efficiency` to `Verified` in the milestone board and add:
 | 2026-06-05 | v0.3.2 Tag Efficiency | Verified | `npm test`; `npm run build`; `cargo test`; `cargo check` | Recent tags are exposed, TagEditor filters suggestions, and recent suggestions are wired into details and batch tagging. |
 ```
 
-- [ ] **Step 4: Commit smoke docs**
+- [x] **Step 4: Commit smoke docs**
 
 In `I:\GameResManger`:
 

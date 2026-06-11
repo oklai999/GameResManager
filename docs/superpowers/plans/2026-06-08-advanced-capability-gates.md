@@ -1,5 +1,7 @@
 # Advanced Capability Gates Implementation Plan
 
+**Progress Sync (2026-06-11):** Completed as documentation-only work. v0.4 remains a capability gate; no gated advanced feature was implemented.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Complete v0.4 planning by documenting decision gates for high-risk Sharp Stock-style capabilities before any implementation begins.
@@ -50,7 +52,7 @@
 **Files:**
 - Create: `G:\oklai999的策划仓库\游戏资源管理器\研究记录\2026-06-08-advanced-capability-gates.md`
 
-- [ ] **Step 1: Ensure the research directory exists**
+- [x] **Step 1: Ensure the research directory exists**
 
 Run:
 
@@ -60,7 +62,7 @@ New-Item -ItemType Directory -Path 'G:\oklai999的策划仓库\游戏资源管�
 
 Expected: the directory exists. This command must not delete or modify source asset files.
 
-- [ ] **Step 2: Create the decision record**
+- [x] **Step 2: Create the decision record**
 
 Create `G:\oklai999的策划仓库\游戏资源管理器\研究记录\2026-06-08-advanced-capability-gates.md` with this exact content:
 
@@ -180,7 +182,7 @@ This document keeps high-risk Sharp Stock-style capabilities outside active impl
 No advanced capability should enter implementation until the user explicitly selects it as a new phase and confirms the safety boundary for that phase.
 ```
 
-- [ ] **Step 3: Review the document for prohibited scope**
+- [x] **Step 3: Review the document for prohibited scope**
 
 Run:
 
@@ -190,7 +192,7 @@ Select-String -LiteralPath 'G:\oklai999的策划仓库\游戏资源管理器\研
 
 Expected: the output shows decision-gate sections and does not imply implementation has started.
 
-- [ ] **Step 4: Commit or record planning-doc status**
+- [x] **Step 4: Commit or record planning-doc status**
 
 Run:
 
@@ -207,7 +209,7 @@ Expected: if that planning directory is a Git repository, the new research docum
 **Files:**
 - Modify: `G:\oklai999的策划仓库\游戏资源管理器\里程碑记录\2026-06-04-sharp-stock-reference-milestones.md`
 
-- [ ] **Step 1: Change the v0.4 board status**
+- [x] **Step 1: Change the v0.4 board status**
 
 In the milestone board row for `v0.4 Advanced Capability Gates`, change:
 
@@ -221,7 +223,7 @@ to:
 | v0.4 Advanced Capability Gates | Documented | Keep high-risk reference abilities outside implementation until they satisfy local-first and safety criteria. | Decision record for AI auto-tagging, texture atlas tools, full 3D/Spine/audio preview, cloud/team backend. | Review `G:\oklai999的策划仓库\游戏资源管理器\研究记录\2026-06-08-advanced-capability-gates.md`. | Decision gates documented; no advanced capability implementation started. |
 ```
 
-- [ ] **Step 2: Add completion log entry**
+- [x] **Step 2: Add completion log entry**
 
 Append this row to the completion log table:
 
@@ -229,7 +231,7 @@ Append this row to the completion log table:
 | 2026-06-08 | v0.4 Advanced Capability Gates | Documented | Review `G:\oklai999的策划仓库\游戏资源管理器\研究记录\2026-06-08-advanced-capability-gates.md` | AI auto-tagging, atlas tools, rich previews, and cloud/team backend remain gated behind explicit safety criteria. |
 ```
 
-- [ ] **Step 3: Verify the milestone points to the new record**
+- [x] **Step 3: Verify the milestone points to the new record**
 
 Run:
 
@@ -246,7 +248,7 @@ Expected: the milestone row and completion log both reference the 2026-06-08 dec
 **Files:**
 - Modify: `I:\GameResManger\tests\smoke\README.md`
 
-- [ ] **Step 1: Append high-risk capability gate checks**
+- [x] **Step 1: Append high-risk capability gate checks**
 
 Append this section to `I:\GameResManger\tests\smoke\README.md`:
 
@@ -261,7 +263,7 @@ Append this section to `I:\GameResManger\tests\smoke\README.md`:
 - Confirm no source file is deleted, moved, renamed, modified, or written to during this review.
 ```
 
-- [ ] **Step 2: Run documentation diff**
+- [x] **Step 2: Run documentation diff**
 
 Run:
 
@@ -271,7 +273,7 @@ git diff -- tests/smoke/README.md
 
 Expected: the diff only adds the `Advanced Capability Gate Smoke Review` section.
 
-- [ ] **Step 3: Commit smoke documentation**
+- [x] **Step 3: Commit smoke documentation**
 
 Run:
 
@@ -289,7 +291,7 @@ Expected: a commit is created for the smoke checklist update. Do not stage unrel
 **Files:**
 - No implementation files.
 
-- [ ] **Step 1: Run frontend checks**
+- [x] **Step 1: Run frontend checks**
 
 Run:
 
@@ -300,7 +302,7 @@ npm run build
 
 Expected: all frontend tests pass and production build succeeds. This confirms the documentation-only stage did not break the local app.
 
-- [ ] **Step 2: Run backend checks**
+- [x] **Step 2: Run backend checks**
 
 Run:
 
@@ -312,7 +314,7 @@ cargo check
 
 Expected: all Rust tests pass and backend compiles. If local MSVC or Windows SDK configuration fails, record the exact environment error and do not change business code to work around it.
 
-- [ ] **Step 3: Review working tree scope**
+- [x] **Step 3: Review working tree scope**
 
 Run:
 
@@ -322,7 +324,7 @@ git status --short
 
 Expected: only v0.4 documentation changes are present in `I:\GameResManger`. Existing unrelated deleted release files or unrelated untracked files must not be staged or reverted.
 
-- [ ] **Step 4: Record planning repository status**
+- [x] **Step 4: Record planning repository status**
 
 Run:
 
