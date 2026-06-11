@@ -10,7 +10,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 
 ## Status
 
-- Current version: `0.7.0`
+- Current version: `0.8.0`
 - Platform focus: Windows desktop
 - Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag efficiency, path variants, and advanced filters
 - License: MIT
@@ -27,7 +27,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 - Sort by file name, size, modified time, or asset type.
 - Mark assets as favorites.
 - Apply tags to one or more assets, with recent tag suggestions.
-- Create collections and add assets to collections.
+- Create, rename, describe, count, delete, and filter collections; add or remove single and multiple assets without changing source files.
 - Edit per-asset notes.
 - Track recent open/reveal/copy-path actions.
 - Open files, reveal containing folders, and copy absolute paths.

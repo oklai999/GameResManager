@@ -243,4 +243,20 @@ Use a fixture folder with the newly covered formats.
 - Edit a note and add a tag, then immediately search for a middle substring from each value.
 - Rescan the folder and confirm the same substring searches still work.
 - Remove a library folder from the app and confirm its former assets no longer appear in search; confirm source files remain on disk.
-- Confirm no source file is deleted, moved, renamed, modified, or written to.
+
+---
+
+## v0.8.0 Collection Management Smoke Test
+
+Status: Passed manually on 2026-06-11.
+
+- Create a collection named `角色` and confirm it appears with `0` resources.
+- Select two assets and add them to `角色`; confirm the collection count becomes `2`.
+- Select the `角色` collection and confirm only its members appear.
+- Open collection management, rename it to `主角`, add description `常用角色素材`, close and reopen the manager, and confirm both values persist.
+- While filtering by `主角`, select one resource and use `从当前集合移出`; confirm the resource disappears and the count decreases.
+- Select multiple remaining resources and use the batch remove action; confirm all selected links are removed.
+- Add the same asset to the same collection twice and confirm no duplicate card or count is created.
+- Delete the collection and confirm the collection filter clears.
+- Confirm every source asset still exists at the same absolute path and its contents and modified time are unchanged.
+- Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
