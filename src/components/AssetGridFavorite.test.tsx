@@ -34,6 +34,7 @@ describe("AssetGrid favorite", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={onToggleFavorite}
+        density="comfortable"
       />
     );
 

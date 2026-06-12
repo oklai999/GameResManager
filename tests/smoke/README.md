@@ -276,3 +276,24 @@ Status: Passed manually on 2026-06-11.
 - Delete the collection and confirm the collection filter clears.
 - Confirm every source asset still exists at the same absolute path and its contents and modified time are unchanged.
 - Confirm no source file is deleted, moved, renamed, modified, or written to during this smoke test.
+
+---
+
+## v0.9.1 Focus Workbench UI Smoke Test
+
+- [ ] Confirm the left navigation rail shows 资源库、类型、标签、集合、最近、设置.
+- [ ] Click each rail item and confirm the contextual sidebar shows only the matching content.
+- [ ] Click the active rail item again and confirm the contextual sidebar collapses without hiding the grid or inspector.
+- [ ] Search by file name and confirm results update as before.
+- [ ] Open 筛选 and confirm search scopes, size, dimensions, date range and reset controls remain functional.
+- [ ] Apply at least three advanced filters and confirm readable filter chips appear below the toolbar.
+- [ ] Remove one chip and confirm only that filter is cleared.
+- [ ] Change sorting and confirm result order changes.
+- [ ] Switch between 紧凑网格 and 舒适网格 and confirm selection, favorites and virtual scrolling remain functional.
+- [ ] Select one asset and confirm preview, properties, path variants, note, tags and collections remain available.
+- [ ] Scroll a long inspector and confirm 打开文件、所在目录、复制路径 remain fixed at the bottom.
+- [ ] Select multiple assets and confirm batch tags, collections and current-collection removal remain available.
+- [ ] Run a scan and confirm scan status remains readable without covering search or results.
+- [ ] Resize the window down to 1100px width and confirm all four regions remain usable without overlapping.
+- [ ] Confirm keyboard focus is visible on rail, toolbar, cards, inspector controls and dialogs.
+- [ ] Confirm no source file is deleted, moved, renamed, modified or written to.

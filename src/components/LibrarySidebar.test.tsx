@@ -2,7 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LibrarySidebar } from "./LibrarySidebar";
-import type { Collection, Tag } from "../types/asset";
+import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob, Tag } from "../types/asset";
+import type { WorkbenchSection } from "./NavigationRail";
 
 function makeFolder(id: number, name: string) {
   return { id, name, path: `C:/${name.toLowerCase()}`, created_at: "", last_scanned_at: null, is_enabled: true };
@@ -13,12 +14,42 @@ function makeCollection(id: number, name: string): Collection {
 }
 
 describe("LibrarySidebar", () => {
+  const defaultProps = {
+    folders: [] as LibraryFolder[],
+    collections: [] as Collection[],
+    tags: [] as Tag[],
+    activeFilter: "all",
+    activeSection: "library" as WorkbenchSection,
+    hidden: false,
+    selectedFolderId: null,
+    selectedCollectionId: null,
+    onFilterChange: vi.fn(),
+    onSelectFolder: vi.fn(),
+    onSelectCollection: vi.fn(),
+    onPickFolder: vi.fn(),
+    onScanFolder: vi.fn(),
+    onCancelScan: vi.fn(),
+    onDeleteFolder: vi.fn(),
+    onOpenFolder: vi.fn(),
+    onCreateCollection: vi.fn(),
+    onUpdateCollection: vi.fn(),
+    onDeleteCollection: vi.fn(),
+    onUpdateTag: vi.fn(),
+    onDeleteTag: vi.fn(),
+    isScanning: false,
+    latestJobs: {} as Record<number, ScanJob | null>,
+    folderCounts: {} as Record<number, FolderAssetCounts>,
+    settingsPanel: null,
+  };
+
   it("shows recent activity filter", () => {
     render(
       <LibrarySidebar
         folders={[]}
         collections={[]}
         activeFilter="all"
+        activeSection={"recent" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -52,6 +83,8 @@ describe("LibrarySidebar", () => {
         folders={[]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -87,6 +120,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -123,6 +158,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -160,6 +197,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -195,6 +234,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -229,6 +270,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={1}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -265,6 +308,8 @@ describe("LibrarySidebar", () => {
         folders={[]}
         collections={[makeCollection(1, "Heroes"), makeCollection(2, "Icons")]}
         activeFilter="all"
+        activeSection={"collections" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -304,6 +349,8 @@ describe("LibrarySidebar", () => {
         folders={[]}
         collections={[]}
         activeFilter="all"
+        activeSection={"collections" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -341,6 +388,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -382,6 +431,8 @@ describe("LibrarySidebar", () => {
         folders={[folder]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -416,6 +467,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -449,6 +502,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -483,6 +538,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -520,6 +577,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -555,6 +614,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -596,6 +657,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -635,6 +698,8 @@ describe("LibrarySidebar", () => {
         folders={[makeFolder(1, "Assets")]}
         collections={[]}
         activeFilter="all"
+        activeSection={"library" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -687,6 +752,8 @@ describe("LibrarySidebar", () => {
         folders={[]}
         collections={[{ id: 1, name: "角色", description: "", asset_count: 12 }]}
         activeFilter="all"
+        activeSection={"collections" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -722,6 +789,8 @@ describe("LibrarySidebar", () => {
         collections={[]}
         tags={[{ id: 1, name: "角色", color: "#5B8DEF", asset_count: 3 }]}
         activeFilter="all"
+        activeSection={"tags" as WorkbenchSection}
+        hidden={false}
         selectedFolderId={null}
         selectedCollectionId={null}
         onFilterChange={vi.fn()}
@@ -746,5 +815,42 @@ describe("LibrarySidebar", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "管理标签" }));
     expect(screen.getByRole("dialog", { name: "标签管理" })).toBeInTheDocument();
+  });
+
+  it("shows folders only in the library context", () => {
+    const { rerender } = render(
+      <LibrarySidebar {...defaultProps} activeSection="library" />
+    );
+    expect(screen.getByText("素材文件夹")).toBeInTheDocument();
+    rerender(
+      <LibrarySidebar {...defaultProps} activeSection="types" />
+    );
+    expect(screen.queryByText("素材文件夹")).not.toBeInTheDocument();
+  });
+
+  it("shows type filters in the types context", () => {
+    render(
+      <LibrarySidebar {...defaultProps} activeSection="types" />
+    );
+    expect(screen.getByRole("button", { name: /图片/ })).toBeInTheDocument();
+  });
+
+  it("shows settings only in the settings context", () => {
+    render(
+      <LibrarySidebar
+        {...defaultProps}
+        activeSection="settings"
+        settingsPanel={<div>扫描设置内容</div>}
+      />
+    );
+    expect(screen.getByText("扫描设置内容")).toBeInTheDocument();
+    expect(screen.queryByText("新建集合...")).not.toBeInTheDocument();
+  });
+
+  it("does not render content while collapsed", () => {
+    render(
+      <LibrarySidebar {...defaultProps} activeSection="library" hidden={true} />
+    );
+    expect(screen.queryByText("添加文件夹")).not.toBeInTheDocument();
   });
 });

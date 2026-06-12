@@ -737,4 +737,68 @@ describe("DetailsPanel", () => {
     expect(await screen.findByRole("button", { name: "移除标签 特效" })).toBeInTheDocument();
     expect(mockedListCommonTags).toHaveBeenLastCalledWith([1, 3]);
   });
+
+  it("keeps single-asset actions in a dedicated footer", async () => {
+    const { container } = render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+      />
+    );
+    expect(await screen.findByRole("button", { name: "打开文件" })).toBeInTheDocument();
+    const footer = container.querySelector(".inspector-action-footer");
+    expect(footer).not.toBeNull();
+  });
+
+  it("keeps inspector content in its own scroll region", async () => {
+    const { container } = render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+      />
+    );
+    await screen.findByText("1.png");
+    expect(container.querySelector(".inspector-scroll")).not.toBeNull();
+  });
+
+  it("does not show file actions in batch mode", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1), makeAsset(2)]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+      />
+    );
+    expect(await screen.findByText("已选择 2 个资源")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开文件" })).not.toBeInTheDocument();
+  });
 });

@@ -68,7 +68,7 @@ describe("AssetGrid", () => {
 
   it("calls selection change when an asset is clicked", async () => {
     const onSelectionChange = vi.fn();
-    render(<AssetGrid assets={[asset]} selectedIds={[]} onSelectionChange={onSelectionChange} onToggleFavorite={vi.fn()} />);
+    render(<AssetGrid assets={[asset]} selectedIds={[]} onSelectionChange={onSelectionChange} onToggleFavorite={vi.fn()} density="comfortable" />);
 
     await userEvent.click(screen.getByTitle("C:/assets/icon.png"));
 
@@ -82,6 +82,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -95,6 +96,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -108,6 +110,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -124,6 +127,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -145,6 +149,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -166,6 +171,7 @@ describe("AssetGrid", () => {
         selectedIds={[2]}
         onSelectionChange={onSelectionChange}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -182,6 +188,7 @@ describe("AssetGrid", () => {
         selectedIds={[1]}
         onSelectionChange={onSelectionChange}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -201,6 +208,7 @@ describe("AssetGrid", () => {
         selectedIds={[1]}
         onSelectionChange={onSelectionChange}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -220,6 +228,7 @@ describe("AssetGrid", () => {
         selectedIds={[1, 2]}
         onSelectionChange={onSelectionChange}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -235,6 +244,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -250,6 +260,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -265,6 +276,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -281,6 +293,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
     expect(container.querySelector("img")).toBeNull();
@@ -292,6 +305,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -316,6 +330,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -339,6 +354,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -368,6 +384,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -381,6 +398,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -405,6 +423,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={onSelectionChange}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
       />
     );
 
@@ -430,6 +449,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
         resetKey="A"
       />
     );
@@ -444,6 +464,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
         resetKey="B"
       />
     );
@@ -464,6 +485,7 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
         resetKey="A"
       />
     );
@@ -478,10 +500,45 @@ describe("AssetGrid", () => {
         selectedIds={[]}
         onSelectionChange={vi.fn()}
         onToggleFavorite={vi.fn()}
+        density="comfortable"
         resetKey="A"
       />
     );
 
     expect(viewport.scrollTop).toBe(500);
+  });
+
+  it("renders comfortable card dimensions when density is comfortable", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    render(
+      <AssetGrid
+        assets={[makeAsset({ id: 1, file_name: "test.png" })]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        density="comfortable"
+      />
+    );
+
+    const card = screen.getByTitle("C:/assets/icon.png");
+    expect(card.style.width).toBe("176px");
+    expect(card.style.height).toBe("238px");
+  });
+
+  it("renders compact card dimensions when density is compact", () => {
+    mockGridMeasurements({ width: 900, height: 600 });
+    render(
+      <AssetGrid
+        assets={[makeAsset({ id: 1, file_name: "test.png" })]}
+        selectedIds={[]}
+        onSelectionChange={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        density="compact"
+      />
+    );
+
+    const card = screen.getByTitle("C:/assets/icon.png");
+    expect(card.style.width).toBe("152px");
+    expect(card.style.height).toBe("210px");
   });
 });

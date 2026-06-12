@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../types/asset";
 import { AssetCard } from "./AssetCard";
+import type { GridDensity } from "./SearchToolbar";
 
-const CARD_WIDTH = 176;
-const CARD_HEIGHT = 238;
-const GRID_GAP = 12;
+type DensityMetrics = {
+  cardWidth: number;
+  cardHeight: number;
+  gap: number;
+};
+
+function densityMetrics(density: GridDensity): DensityMetrics {
+  return density === "compact"
+    ? { cardWidth: 152, cardHeight: 210, gap: 10 }
+    : { cardWidth: 176, cardHeight: 238, gap: 12 };
+}
+
 const OVERSCAN_ROWS = 3;
 
 type Props = {
@@ -13,14 +23,17 @@ type Props = {
   onSelectionChange: (ids: number[]) => void;
   onToggleFavorite: (asset: Asset) => void;
   resetKey?: string | number;
+  density: GridDensity;
 };
 
-export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite, resetKey }: Props) {
+export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite, resetKey, density }: Props) {
   const [failedMap, setFailedMap] = useState<Map<number, { thumbnail_path: string | null; thumbnail_status: string }>>(new Map());
 
   const viewportRef = useRef<HTMLElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [scrollTop, setScrollTop] = useState(0);
+
+  const { cardWidth, cardHeight, gap } = densityMetrics(density);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -96,7 +109,7 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
     });
   }
 
-  const columns = Math.max(1, Math.floor((viewport.width + GRID_GAP) / (CARD_WIDTH + GRID_GAP)));
+  const columns = Math.max(1, Math.floor((viewport.width + gap) / (cardWidth + gap)));
   const rowCount = Math.ceil(assets.length / columns);
 
   // Reset scroll to top when the dataset is replaced (query/filter/sort change),
@@ -117,22 +130,22 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
-    const totalHeight = rowCount * (CARD_HEIGHT + GRID_GAP);
+    const totalHeight = rowCount * (cardHeight + gap);
     const maxScroll = Math.max(0, totalHeight - el.clientHeight);
     if (el.scrollTop > maxScroll) {
       el.scrollTop = maxScroll;
       setScrollTop(maxScroll);
     }
-  }, [assets.length, rowCount]);
+  }, [assets.length, rowCount, density, cardHeight, gap]);
 
   const firstVisibleRow = Math.max(
     0,
     Math.min(
-      Math.floor(scrollTop / (CARD_HEIGHT + GRID_GAP)) - OVERSCAN_ROWS,
+      Math.floor(scrollTop / (cardHeight + gap)) - OVERSCAN_ROWS,
       rowCount - 1
     )
   );
-  const visibleRowCount = Math.ceil(viewport.height / (CARD_HEIGHT + GRID_GAP)) + OVERSCAN_ROWS * 2;
+  const visibleRowCount = Math.ceil(viewport.height / (cardHeight + gap)) + OVERSCAN_ROWS * 2;
   const lastVisibleRow = Math.min(rowCount, firstVisibleRow + visibleRowCount);
   const startIndex = firstVisibleRow * columns;
   const endIndex = Math.min(assets.length, lastVisibleRow * columns);
@@ -146,7 +159,7 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
     >
       <div
         className="asset-grid-spacer"
-        style={{ height: rowCount * (CARD_HEIGHT + GRID_GAP) }}
+        style={{ height: rowCount * (cardHeight + gap) }}
       >
         {visibleAssets.map((asset, localIndex) => {
           const index = startIndex + localIndex;
@@ -170,10 +183,10 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
               onToggleFavorite={onToggleFavorite}
               style={{
                 position: "absolute",
-                width: CARD_WIDTH,
-                height: CARD_HEIGHT,
+                width: cardWidth,
+                height: cardHeight,
                 overflow: "hidden",
-                transform: `translate(${column * (CARD_WIDTH + GRID_GAP)}px, ${row * (CARD_HEIGHT + GRID_GAP)}px)`,
+                transform: `translate(${column * (cardWidth + gap)}px, ${row * (cardHeight + gap)}px)`,
               }}
             />
           );

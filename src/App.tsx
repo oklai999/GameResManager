@@ -37,8 +37,12 @@ import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { EmptyState } from "./components/EmptyState";
 import { LibrarySidebar } from "./components/LibrarySidebar";
+import { NavigationRail } from "./components/NavigationRail";
+import type { WorkbenchSection } from "./components/NavigationRail";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
+import { ActiveFilterChips } from "./components/ActiveFilterChips";
+import { FilterPanel } from "./components/FilterPanel";
 import { SearchToolbar } from "./components/SearchToolbar";
 import { ToastProvider, useToast } from "./components/ToastHost";
 import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope, Tag } from "./types/asset";
@@ -98,6 +102,10 @@ function AppInner() {
   const [recentTags, setRecentTags] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagRefreshVersion, setTagRefreshVersion] = useState(0);
+  const [activeSection, setActiveSection] = useState<WorkbenchSection>("library");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [gridDensity, setGridDensity] = useState<"compact" | "comfortable">("compact");
   const [projectRoot, setProjectRoot] = useState("");
   const searchVersionRef = useRef(0);
 
@@ -650,6 +658,22 @@ function AppInner() {
     }
   }, [showToast]);
 
+  const handleWorkbenchSection = useCallback(
+    (section: WorkbenchSection) => {
+      if (section === activeSection) {
+        setSidebarOpen((open) => !open);
+        return;
+      }
+      setActiveSection(section);
+      setActiveFilter("all");
+      setSelectedFolderId(null);
+      setSelectedCollectionId(null);
+      setSelectedIds([]);
+      setSidebarOpen(true);
+    },
+    [activeSection]
+  );
+
   const handleCopyText = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -671,11 +695,20 @@ function AppInner() {
     hasAdvancedFilters;
 
   return (
-    <main className="app-shell">
+    <main
+      className={sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed"}
+    >
+      <NavigationRail
+        activeSection={activeSection}
+        sidebarOpen={sidebarOpen}
+        onSelect={handleWorkbenchSection}
+      />
       <LibrarySidebar
         folders={folders}
         collections={collections}
         activeFilter={activeFilter}
+        activeSection={activeSection}
+        hidden={!sidebarOpen}
         selectedFolderId={selectedFolderId}
         selectedCollectionId={selectedCollectionId}
         onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
@@ -704,13 +737,27 @@ function AppInner() {
       <section className="workspace">
         <SearchToolbar
           query={query}
+          sort={sort}
+          totalCount={displayedTotalCount}
+          filterOpen={filterOpen}
+          density={gridDensity}
+          onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }}
+          onSortChange={handleSortChange}
+          onToggleFilters={() => setFilterOpen((prev) => !prev)}
+          onDensityChange={(d) => setGridDensity(d)}
+        />
+        <FilterPanel
+          open={filterOpen}
           scope={scope}
           filters={filters}
-          sort={sort}
-          onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }}
           onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
           onFiltersChange={handleFiltersChange}
-          onSortChange={handleSortChange}
+        />
+        <ActiveFilterChips
+          filters={filters}
+          scope={scope}
+          onFiltersChange={handleFiltersChange}
+          onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
         />
         {scanMessage && (
           <div className="scan-summary" onClick={() => setScanMessage(null)}>
@@ -736,6 +783,7 @@ function AppInner() {
               onSelectionChange={setSelectedIds}
               onToggleFavorite={handleToggleFavorite}
               resetKey={gridResetKey}
+              density={gridDensity}
             />
             {displayAssets.length > 0 && (
               <div className="result-footer">

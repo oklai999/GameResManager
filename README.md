@@ -10,7 +10,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 
 ## Status
 
-- Current version: `0.9.0`
+- Current version: `0.9.1`
 - Platform focus: Windows desktop
 - Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag management, collection management, path variants, and advanced filters
 - License: MIT
@@ -21,7 +21,9 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 - Scan and index common game asset formats.
 - Generate WebP thumbnails for image assets.
 - Keep thumbnails and SQLite data in the Tauri app data directory, outside source asset folders.
-- Browse assets in a three-column workbench: library filters, asset grid, and details/batch actions.
+- Browse assets in a focused desktop workbench with a compact navigation rail, contextual sidebar, virtualized asset grid, and fixed inspector actions.
+- Keep advanced filters in an expandable panel and review active conditions as removable filter chips.
+- Switch between compact and comfortable grid density without losing asset-management actions.
 - Search by file name, tags, notes, and path.
 - Filter by type, folder, collection, favorite state, missing state, file size, dimensions, and modified time.
 - Sort by file name, size, modified time, or asset type.
@@ -130,7 +132,7 @@ cargo check
 
 Current local verification baseline:
 
-- `npm test`: 71 frontend tests passing.
+- `npm test`: 124 frontend tests passing.
 - `npm run build`: succeeds.
 - `cargo test`: 107 Rust unit tests plus the build script integration test passing.
 - `cargo check`: succeeds when the local MSVC and Windows SDK environment is configured.
