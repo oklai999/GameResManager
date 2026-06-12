@@ -16,7 +16,8 @@ describe("TagEditor", () => {
   });
 
   it("renders existing tags as chips", async () => {
-    render(<TagEditor existingTags={["important", "draft"]} onApply={vi.fn()} />);
+    render(<TagEditor existingTags={["important", "draft"]} onApply={vi.fn()}
+        onRemove={vi.fn()} />);
     await waitFor(() => {
       expect(screen.getByText("important")).toBeInTheDocument();
     });
@@ -25,7 +26,8 @@ describe("TagEditor", () => {
 
   it("calls onApply with input value when form submitted", async () => {
     const onApply = vi.fn();
-    render(<TagEditor existingTags={[]} onApply={onApply} />);
+    render(<TagEditor existingTags={[]} onApply={onApply}
+        onRemove={vi.fn()} />);
 
     const input = screen.getByPlaceholderText("输入标签...");
     await userEvent.type(input, "new-tag");
@@ -36,7 +38,8 @@ describe("TagEditor", () => {
 
   it("does not call onApply when input is empty", async () => {
     const onApply = vi.fn();
-    render(<TagEditor existingTags={[]} onApply={onApply} />);
+    render(<TagEditor existingTags={[]} onApply={onApply}
+        onRemove={vi.fn()} />);
 
     await userEvent.click(screen.getByText("添加"));
 
@@ -45,11 +48,12 @@ describe("TagEditor", () => {
 
   it("shows recent tags before older tag suggestions", async () => {
     mockedListTags.mockResolvedValue([
-      { id: 1, name: "角色", color: "#5B8DEF" },
-      { id: 2, name: "地形", color: "#5B8DEF" },
+      { id: 1, name: "角色", color: "#5B8DEF", asset_count: 0 },
+      { id: 2, name: "地形", color: "#5B8DEF", asset_count: 0 },
     ]);
 
-    render(<TagEditor existingTags={[]} recentTags={["特效", "角色"]} onApply={vi.fn()} />);
+    render(<TagEditor existingTags={[]} recentTags={["特效", "角色"]} onApply={vi.fn()}
+        onRemove={vi.fn()} />);
 
     await screen.findByRole("button", { name: "特效" });
     const suggestions = screen.getAllByRole("button").map((button) => button.textContent);
@@ -60,12 +64,13 @@ describe("TagEditor", () => {
 
   it("filters tag suggestions by typed text", async () => {
     mockedListTags.mockResolvedValue([
-      { id: 1, name: "地形", color: "#5B8DEF" },
-      { id: 2, name: "角色", color: "#5B8DEF" },
-      { id: 3, name: "特效", color: "#5B8DEF" },
+      { id: 1, name: "地形", color: "#5B8DEF", asset_count: 0 },
+      { id: 2, name: "角色", color: "#5B8DEF", asset_count: 0 },
+      { id: 3, name: "特效", color: "#5B8DEF", asset_count: 0 },
     ]);
 
-    render(<TagEditor existingTags={[]} recentTags={["UI"]} onApply={vi.fn()} />);
+    render(<TagEditor existingTags={[]} recentTags={["UI"]} onApply={vi.fn()}
+        onRemove={vi.fn()} />);
 
     await userEvent.type(screen.getByPlaceholderText("输入标签..."), "地");
 
@@ -75,11 +80,12 @@ describe("TagEditor", () => {
 
   it("does not suggest tags already applied to the current selection", async () => {
     mockedListTags.mockResolvedValue([
-      { id: 1, name: "地形", color: "#5B8DEF" },
-      { id: 2, name: "角色", color: "#5B8DEF" },
+      { id: 1, name: "地形", color: "#5B8DEF", asset_count: 0 },
+      { id: 2, name: "角色", color: "#5B8DEF", asset_count: 0 },
     ]);
 
-    render(<TagEditor existingTags={["地形"]} recentTags={["地形", "角色"]} onApply={vi.fn()} />);
+    render(<TagEditor existingTags={["地形"]} recentTags={["地形", "角色"]} onApply={vi.fn()}
+        onRemove={vi.fn()} />);
 
     await screen.findByRole("button", { name: "角色" });
 
@@ -88,13 +94,29 @@ describe("TagEditor", () => {
 
   it("applies a suggested tag and clears the input", async () => {
     const onApply = vi.fn();
-    mockedListTags.mockResolvedValue([{ id: 1, name: "特效", color: "#5B8DEF" }]);
-    render(<TagEditor existingTags={[]} recentTags={[]} onApply={onApply} />);
+    mockedListTags.mockResolvedValue([{ id: 1, name: "特效", color: "#5B8DEF", asset_count: 0 }]);
+    render(<TagEditor existingTags={[]} recentTags={[]} onApply={onApply}
+        onRemove={vi.fn()} />);
 
     await userEvent.type(screen.getByPlaceholderText("输入标签..."), "特");
     await userEvent.click(screen.getByRole("button", { name: "特效" }));
 
     expect(onApply).toHaveBeenCalledWith("特效");
     expect(screen.getByPlaceholderText("输入标签...")).toHaveValue("");
+  });
+
+  it("removes an existing tag", async () => {
+    const onRemove = vi.fn();
+    render(
+      <TagEditor
+        existingTags={["角色"]}
+        onApply={vi.fn()}
+        onRemove={onRemove}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "移除标签 角色" }));
+
+    expect(onRemove).toHaveBeenCalledWith("角色");
   });
 });

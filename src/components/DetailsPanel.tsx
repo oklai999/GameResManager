@@ -13,7 +13,9 @@ type Props = {
   onReveal: (asset: Asset) => void;
   onCopyPath: (asset: Asset) => void;
   onApplyTag: (tagName: string, assetIds: number[]) => void;
+  onRemoveTag: (tagName: string, assetIds: number[]) => void;
   onToggleFavorite: (asset: Asset) => void;
+  tagRefreshVersion: number;
   onAddToCollection: (collectionId: number, assetIds: number[]) => void;
   onUpdateNote?: (asset: Asset) => void;
   recentTags?: string[];
@@ -51,7 +53,9 @@ export function DetailsPanel({
   onReveal,
   onCopyPath,
   onApplyTag,
+  onRemoveTag,
   onToggleFavorite,
+  tagRefreshVersion,
   onAddToCollection,
   onUpdateNote,
   recentTags = [],
@@ -66,6 +70,7 @@ export function DetailsPanel({
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
   const [pathVariants, setPathVariants] = useState<AssetPathVariants | null>(null);
+  const selectedAssetIdsKey = selectedAssets.map((asset) => asset.id).join(",");
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +95,7 @@ export function DetailsPanel({
       setNoteError(null);
     }
     return () => { cancelled = true; };
-  }, [selectedAssets.length, selectedAssets[0]?.id, selectedAssets[0]?.note]);
+  }, [selectedAssets.length, selectedAssetIdsKey, selectedAssets[0]?.note, tagRefreshVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +155,7 @@ export function DetailsPanel({
         <section className="inspector-section">
           <div className="section-title">共同标签</div>
           <div className="detail-row">{tags.length > 0 ? tags.join(", ") : "无"}</div>
-          <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, ids)} />
+          <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, ids)} onRemove={(tagName) => onRemoveTag(tagName, ids)} />
         </section>
         {collections.length > 0 && (
           <section className="inspector-section">
@@ -275,7 +280,7 @@ export function DetailsPanel({
 
       <section className="inspector-section">
         <div className="section-title">标签</div>
-        <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, [asset.id])} />
+        <TagEditor existingTags={tags} recentTags={recentTags} onApply={(tagName) => onApplyTag(tagName, [asset.id])} onRemove={(tagName) => onRemoveTag(tagName, [asset.id])} />
       </section>
 
       {collections.length > 0 && (

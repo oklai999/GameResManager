@@ -41,6 +41,25 @@ export async function listCommonTags(assetIds: number[]): Promise<string[]> {
   return invoke<string[]>("list_common_tags", { assetIds });
 }
 
+export async function updateTag(
+  tagId: number,
+  name: string,
+  color: string
+): Promise<Tag> {
+  return invoke<Tag>("update_tag", { tagId, name, color });
+}
+
+export async function removeTagFromAssets(
+  tagId: number,
+  assetIds: number[]
+): Promise<number> {
+  return invoke<number>("remove_tag_from_assets", { tagId, assetIds });
+}
+
+export async function deleteTag(tagId: number): Promise<boolean> {
+  return invoke<boolean>("delete_tag", { tagId });
+}
+
 export async function setAssetFavorite(assetId: number, isFavorite: boolean): Promise<void> {
   await invoke("set_asset_favorite", { assetId, isFavorite });
 }

@@ -261,18 +261,23 @@ pub async fn list_asset_tags_map(db: &Db) -> anyhow::Result<Vec<(i64, String)>> 
 }
 
 pub async fn list_tags(db: &Db) -> anyhow::Result<Vec<crate::models::Tag>> {
-    let rows = sqlx::query_as::<_, crate::models::Tag>(
-        "SELECT id, name, color FROM tags ORDER BY name"
+    sqlx::query_as::<_, crate::models::Tag>(
+        "SELECT t.id, t.name, t.color, COUNT(at.asset_id) AS asset_count
+         FROM tags t
+         LEFT JOIN asset_tags at ON at.tag_id = t.id
+         GROUP BY t.id, t.name, t.color
+         ORDER BY t.name COLLATE NOCASE, t.id"
     )
     .fetch_all(db)
-    .await?;
-    Ok(rows)
+    .await
+    .map_err(Into::into)
 }
 
 pub async fn list_recent_tags(db: &Db, limit: i64) -> anyhow::Result<Vec<crate::models::Tag>> {
     let limit = limit.clamp(0, 50);
     sqlx::query_as::<_, crate::models::Tag>(
-        "SELECT id, name, color
+        "SELECT id, name, color,
+            (SELECT COUNT(*) FROM asset_tags at WHERE at.tag_id = tags.id) AS asset_count
          FROM tags
          ORDER BY last_used_at DESC, name ASC
          LIMIT ?1",
@@ -281,6 +286,155 @@ pub async fn list_recent_tags(db: &Db, limit: i64) -> anyhow::Result<Vec<crate::
     .fetch_all(db)
     .await
     .map_err(Into::into)
+}
+
+async fn load_tag(
+    conn: &mut sqlx::SqliteConnection,
+    tag_id: i64,
+) -> anyhow::Result<crate::models::Tag> {
+    sqlx::query_as::<_, crate::models::Tag>(
+        "SELECT t.id, t.name, t.color, COUNT(at.asset_id) AS asset_count
+         FROM tags t
+         LEFT JOIN asset_tags at ON at.tag_id = t.id
+         WHERE t.id = ?1
+         GROUP BY t.id, t.name, t.color"
+    )
+    .bind(tag_id)
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("tag not found"))
+}
+
+pub async fn update_tag(
+    db: &Db,
+    tag_id: i64,
+    name: &str,
+    color: &str,
+) -> anyhow::Result<crate::models::Tag> {
+    let name = normalize_tag_name(name);
+    anyhow::ensure!(!name.is_empty(), "tag name cannot be empty");
+    let color = crate::tags::normalize_tag_color(color)?;
+    let mut tx = db.begin().await?;
+    let source = load_tag(&mut *tx, tag_id).await?;
+
+    if name == source.name && color == source.color {
+        tx.rollback().await?;
+        return Ok(source);
+    }
+
+    let affected_ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT asset_id FROM asset_tags WHERE tag_id = ?1 ORDER BY asset_id"
+    )
+    .bind(tag_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let target_id: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM tags WHERE name = ?1 AND id != ?2")
+            .bind(&name)
+            .bind(tag_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+    let result_id = if let Some(target_id) = target_id {
+        sqlx::query(
+            "INSERT OR IGNORE INTO asset_tags (asset_id, tag_id)
+             SELECT asset_id, ?1 FROM asset_tags WHERE tag_id = ?2"
+        )
+        .bind(target_id)
+        .bind(tag_id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("DELETE FROM tags WHERE id = ?1")
+            .bind(tag_id)
+            .execute(&mut *tx)
+            .await?;
+        target_id
+    } else if name == source.name {
+        sqlx::query("UPDATE tags SET color = ?1 WHERE id = ?2")
+            .bind(&color)
+            .bind(tag_id)
+            .execute(&mut *tx)
+            .await?;
+        tag_id
+    } else {
+        sqlx::query(
+            "UPDATE tags
+             SET name = ?1, color = ?2, last_used_at = ?3
+             WHERE id = ?4"
+        )
+        .bind(&name)
+        .bind(&color)
+        .bind(Utc::now().to_rfc3339())
+        .bind(tag_id)
+        .execute(&mut *tx)
+        .await?;
+        tag_id
+    };
+
+    for asset_id in affected_ids {
+        refresh_asset_search_document(&mut *tx, asset_id).await?;
+    }
+    let result = load_tag(&mut *tx, result_id).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+const DELETE_BATCH_SIZE: usize = 500;
+
+pub async fn remove_tag_from_assets(
+    db: &Db,
+    tag_id: i64,
+    asset_ids: &[i64],
+) -> anyhow::Result<u64> {
+    anyhow::ensure!(!asset_ids.is_empty(), "asset ids cannot be empty");
+    let mut tx = db.begin().await?;
+    load_tag(&mut *tx, tag_id).await?;
+
+    let mut removed: u64 = 0;
+    for chunk in asset_ids.chunks(DELETE_BATCH_SIZE) {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "DELETE FROM asset_tags WHERE tag_id = "
+        );
+        builder.push_bind(tag_id);
+        builder.push(" AND asset_id IN (");
+        let mut separated = builder.separated(", ");
+        for asset_id in chunk {
+            separated.push_bind(asset_id);
+        }
+        separated.push_unseparated(")");
+        removed += builder.build().execute(&mut *tx).await?.rows_affected();
+    }
+
+    for asset_id in asset_ids {
+        refresh_asset_search_document(&mut *tx, *asset_id).await?;
+    }
+    tx.commit().await?;
+    Ok(removed)
+}
+
+pub async fn delete_tag(db: &Db, tag_id: i64) -> anyhow::Result<bool> {
+    let mut tx = db.begin().await?;
+    let affected_ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT asset_id FROM asset_tags WHERE tag_id = ?1 ORDER BY asset_id"
+    )
+    .bind(tag_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let deleted = sqlx::query("DELETE FROM tags WHERE id = ?1")
+        .bind(tag_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected() == 1;
+    if !deleted {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    for asset_id in affected_ids {
+        refresh_asset_search_document(&mut *tx, asset_id).await?;
+    }
+    tx.commit().await?;
+    Ok(true)
 }
 
 pub async fn list_asset_tags(db: &Db, asset_id: i64) -> anyhow::Result<Vec<String>> {
@@ -1750,6 +1904,18 @@ mod recent_tag_tests {
         .execute(&pool)
         .await
         .unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id),
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
         pool
     }
 
@@ -2185,5 +2351,397 @@ mod fts_tests {
 
         assert_eq!(row.0, "主角待机动画");
         assert_eq!(row.1, "角色动画");
+    }
+}
+
+#[cfg(test)]
+mod tag_management_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let options = SqliteConnectOptions::new()
+            .filename(":memory:")
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE library_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_scanned_at TEXT,
+                is_enabled INTEGER NOT NULL DEFAULT 1
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL DEFAULT '#5B8DEF',
+                created_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE asset_tags (
+                asset_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (asset_id, tag_id),
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'unicode61')"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE VIRTUAL TABLE asset_search_trigram_fts USING fts5(file_name, absolute_path, note, tags, tokenize = 'trigram')"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    async fn insert_two_assets(db: &Db) -> (i64, i64) {
+        let folder = create_library_folder(db, "fixture", "C:/assets").await.unwrap();
+        let a = sqlx::query(
+            "INSERT INTO assets (library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        )
+        .bind(folder.id)
+        .bind("C:/assets/a.png")
+        .bind("a.png")
+        .bind("png")
+        .execute(db).await.unwrap().last_insert_rowid();
+        let b = sqlx::query(
+            "INSERT INTO assets (library_folder_id, absolute_path, file_name, extension, asset_type, modified_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'image', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        )
+        .bind(folder.id)
+        .bind("C:/assets/b.png")
+        .bind("b.png")
+        .bind("png")
+        .execute(db).await.unwrap().last_insert_rowid();
+        (a, b)
+    }
+
+    async fn insert_tag(db: &Db, name: &str, color: &str) -> i64 {
+        sqlx::query(
+            "INSERT INTO tags (name, color, created_at, last_used_at) VALUES (?1, ?2, ?3, ?3)"
+        )
+        .bind(name)
+        .bind(color)
+        .bind("2024-01-01T00:00:00Z")
+        .execute(db).await.unwrap().last_insert_rowid()
+    }
+
+    async fn link_tag(db: &Db, tag_id: i64, asset_id: i64) {
+        sqlx::query("INSERT OR IGNORE INTO asset_tags (asset_id, tag_id) VALUES (?1, ?2)")
+            .bind(asset_id)
+            .bind(tag_id)
+            .execute(db).await.unwrap();
+    }
+
+    async fn count_tag(db: &Db, tag_id: i64) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM tags WHERE id = ?1")
+            .bind(tag_id)
+            .fetch_one(db).await.unwrap()
+    }
+
+    async fn count_links(db: &Db, tag_id: i64) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM asset_tags WHERE tag_id = ?1")
+            .bind(tag_id)
+            .fetch_one(db).await.unwrap()
+    }
+
+    async fn tag_by_name(db: &Db, name: &str) -> crate::models::Tag {
+        sqlx::query_as::<_, crate::models::Tag>(
+            "SELECT t.id, t.name, t.color, COUNT(at.asset_id) AS asset_count
+             FROM tags t
+             LEFT JOIN asset_tags at ON at.tag_id = t.id
+             WHERE t.name = ?1
+             GROUP BY t.id, t.name, t.color"
+        )
+        .bind(name)
+        .fetch_one(db)
+        .await
+        .unwrap()
+    }
+
+    async fn assert_fts_tags(db: &Db, asset_id: i64, expected: &str) {
+        for table in [PREFIX_FTS_TABLE, TRIGRAM_FTS_TABLE] {
+            let sql = format!("SELECT tags FROM {table} WHERE rowid = ?1");
+            let actual: String = sqlx::query_scalar(&sql)
+                .bind(asset_id)
+                .fetch_one(db)
+                .await
+                .unwrap();
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn list_tags_includes_asset_count() {
+        let db = setup_db().await;
+        let (asset_a, asset_b) = insert_two_assets(&db).await;
+        apply_tag_to_assets(&db, "角色", &[asset_a, asset_b]).await.unwrap();
+
+        let tags = list_tags(&db).await.unwrap();
+
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].name, "角色");
+        assert_eq!(tags[0].asset_count, 2);
+    }
+
+    #[tokio::test]
+    async fn update_tag_renames_and_normalizes_color() {
+        let db = setup_db().await;
+        let tag_id = insert_tag(&db, "旧标签", "#5B8DEF").await;
+
+        let updated = update_tag(&db, tag_id, "  新   标签 ", "#abcdef")
+            .await
+            .unwrap();
+
+        assert_eq!(updated.name, "新 标签");
+        assert_eq!(updated.color, "#ABCDEF");
+        assert_eq!(updated.asset_count, 0);
+    }
+
+    #[tokio::test]
+    async fn update_tag_merges_into_existing_tag() {
+        let db = setup_db().await;
+        let (asset_a, asset_b) = insert_two_assets(&db).await;
+        let source_id = insert_tag(&db, "来源", "#111111").await;
+        let target_id = insert_tag(&db, "目标", "#ABCDEF").await;
+        link_tag(&db, source_id, asset_a).await;
+        link_tag(&db, source_id, asset_b).await;
+        link_tag(&db, target_id, asset_b).await;
+
+        let merged = update_tag(&db, source_id, "目标", "#222222")
+            .await
+            .unwrap();
+
+        assert_eq!(merged.id, target_id);
+        assert_eq!(merged.color, "#ABCDEF");
+        assert_eq!(merged.asset_count, 2);
+        assert_eq!(count_tag(&db, source_id).await, 0);
+        assert_eq!(count_links(&db, target_id).await, 2);
+    }
+
+    #[tokio::test]
+    async fn update_tag_rejects_blank_name_and_invalid_color() {
+        let db = setup_db().await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+
+        assert!(update_tag(&db, tag_id, "   ", "#5B8DEF").await.is_err());
+        assert!(update_tag(&db, tag_id, "角色", "blue").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn remove_tag_from_assets_is_idempotent_and_keeps_tag() {
+        let db = setup_db().await;
+        let (asset_a, asset_b) = insert_two_assets(&db).await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+        link_tag(&db, tag_id, asset_a).await;
+        link_tag(&db, tag_id, asset_b).await;
+
+        let removed = remove_tag_from_assets(&db, tag_id, &[asset_a, 999])
+            .await
+            .unwrap();
+        let removed_again = remove_tag_from_assets(&db, tag_id, &[asset_a])
+            .await
+            .unwrap();
+
+        assert_eq!(removed, 1);
+        assert_eq!(removed_again, 0);
+        assert_eq!(count_tag(&db, tag_id).await, 1);
+        assert_eq!(count_links(&db, tag_id).await, 1);
+    }
+
+    #[tokio::test]
+    async fn remove_tag_from_assets_rejects_empty_ids() {
+        let db = setup_db().await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+
+        let error = remove_tag_from_assets(&db, tag_id, &[]).await.unwrap_err();
+
+        assert!(error.to_string().contains("asset ids cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn delete_tag_removes_links_but_keeps_assets() {
+        let db = setup_db().await;
+        let (asset_a, asset_b) = insert_two_assets(&db).await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+        link_tag(&db, tag_id, asset_a).await;
+        link_tag(&db, tag_id, asset_b).await;
+
+        assert!(delete_tag(&db, tag_id).await.unwrap());
+
+        let asset_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM assets")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(asset_count, 2);
+        assert_eq!(count_tag(&db, tag_id).await, 0);
+        assert_eq!(count_links(&db, tag_id).await, 0);
+    }
+
+    #[tokio::test]
+    async fn delete_missing_tag_returns_false() {
+        let db = setup_db().await;
+        assert!(!delete_tag(&db, 999).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn tag_rename_merge_remove_and_delete_refresh_both_fts_tables() {
+        let db = setup_db().await;
+        let (asset_a, asset_b) = insert_two_assets(&db).await;
+        apply_tag_to_assets(&db, "来源", &[asset_a, asset_b]).await.unwrap();
+        apply_tag_to_assets(&db, "目标", &[asset_b]).await.unwrap();
+        let source = tag_by_name(&db, "来源").await;
+        let target = tag_by_name(&db, "目标").await;
+
+        update_tag(&db, source.id, "目标", "#123456").await.unwrap();
+        assert_fts_tags(&db, asset_a, "目标").await;
+        assert_fts_tags(&db, asset_b, "目标").await;
+
+        remove_tag_from_assets(&db, target.id, &[asset_a]).await.unwrap();
+        assert_fts_tags(&db, asset_a, "").await;
+
+        delete_tag(&db, target.id).await.unwrap();
+        assert_fts_tags(&db, asset_b, "").await;
+    }
+
+    #[tokio::test]
+    async fn update_tag_rolls_back_when_fts_refresh_fails() {
+        let db = setup_db().await;
+        let (asset_a, _) = insert_two_assets(&db).await;
+        apply_tag_to_assets(&db, "旧标签", &[asset_a]).await.unwrap();
+        let tag = tag_by_name(&db, "旧标签").await;
+        sqlx::query("DROP TABLE asset_search_fts").execute(&db).await.unwrap();
+
+        assert!(update_tag(&db, tag.id, "新标签", "#112233").await.is_err());
+
+        let stored: (String, String) =
+            sqlx::query_as("SELECT name, color FROM tags WHERE id = ?1")
+                .bind(tag.id).fetch_one(&db).await.unwrap();
+        assert_eq!(stored, ("旧标签".to_string(), "#5B8DEF".to_string()));
+    }
+
+    #[tokio::test]
+    async fn update_tag_preserves_last_used_at_when_unchanged_or_color_only() {
+        let db = setup_db().await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+
+        let unchanged = update_tag(&db, tag_id, "角色", "#5B8DEF").await.unwrap();
+        assert_eq!(unchanged.name, "角色");
+        assert_eq!(unchanged.color, "#5B8DEF");
+
+        let color_only = update_tag(&db, tag_id, "角色", "#ABCDEF").await.unwrap();
+        assert_eq!(color_only.color, "#ABCDEF");
+
+        let after: (String, String) =
+            sqlx::query_as("SELECT name, color FROM tags WHERE id = ?1")
+                .bind(tag_id).fetch_one(&db).await.unwrap();
+        assert_eq!(after, ("角色".to_string(), "#ABCDEF".to_string()));
+    }
+
+    #[tokio::test]
+    async fn update_tag_plain_rename_refreshes_both_fts_tables() {
+        let db = setup_db().await;
+        let (asset_a, _) = insert_two_assets(&db).await;
+        apply_tag_to_assets(&db, "旧标签", &[asset_a]).await.unwrap();
+        let tag = tag_by_name(&db, "旧标签").await;
+
+        update_tag(&db, tag.id, "新标签", "#112233").await.unwrap();
+
+        assert_fts_tags(&db, asset_a, "新标签").await;
+    }
+
+    #[tokio::test]
+    async fn update_tag_merge_rolls_back_when_fts_refresh_fails() {
+        let db = setup_db().await;
+        let (asset_a, asset_b) = insert_two_assets(&db).await;
+        let source_id = insert_tag(&db, "来源", "#111111").await;
+        let target_id = insert_tag(&db, "目标", "#ABCDEF").await;
+        link_tag(&db, source_id, asset_a).await;
+        link_tag(&db, target_id, asset_b).await;
+        sqlx::query("DROP TABLE asset_search_fts").execute(&db).await.unwrap();
+
+        assert!(update_tag(&db, source_id, "目标", "#222222").await.is_err());
+
+        assert_eq!(count_tag(&db, source_id).await, 1);
+        assert_eq!(count_tag(&db, target_id).await, 1);
+        assert_eq!(count_links(&db, source_id).await, 1);
+        assert_eq!(count_links(&db, target_id).await, 1);
+    }
+
+    #[tokio::test]
+    async fn remove_tag_from_assets_rolls_back_when_fts_refresh_fails() {
+        let db = setup_db().await;
+        let (asset_a, _) = insert_two_assets(&db).await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+        link_tag(&db, tag_id, asset_a).await;
+        refresh_asset_search_document(&mut *db.acquire().await.unwrap(), asset_a).await.unwrap();
+        sqlx::query("DROP TABLE asset_search_fts").execute(&db).await.unwrap();
+
+        assert!(remove_tag_from_assets(&db, tag_id, &[asset_a]).await.is_err());
+
+        assert_eq!(count_links(&db, tag_id).await, 1);
+    }
+
+    #[tokio::test]
+    async fn delete_tag_rolls_back_when_fts_refresh_fails() {
+        let db = setup_db().await;
+        let (asset_a, _) = insert_two_assets(&db).await;
+        let tag_id = insert_tag(&db, "角色", "#5B8DEF").await;
+        link_tag(&db, tag_id, asset_a).await;
+        refresh_asset_search_document(&mut *db.acquire().await.unwrap(), asset_a).await.unwrap();
+        sqlx::query("DROP TABLE asset_search_fts").execute(&db).await.unwrap();
+
+        assert!(delete_tag(&db, tag_id).await.is_err());
+
+        assert_eq!(count_tag(&db, tag_id).await, 1);
+        assert_eq!(count_links(&db, tag_id).await, 1);
+    }
+
+    #[tokio::test]
+    async fn update_tag_rolls_back_when_trigram_fts_refresh_fails() {
+        let db = setup_db().await;
+        let (asset_a, _) = insert_two_assets(&db).await;
+        apply_tag_to_assets(&db, "旧标签", &[asset_a]).await.unwrap();
+        let tag = tag_by_name(&db, "旧标签").await;
+        sqlx::query("DROP TABLE asset_search_trigram_fts").execute(&db).await.unwrap();
+
+        assert!(update_tag(&db, tag.id, "新标签", "#112233").await.is_err());
+
+        let stored: (String, String) =
+            sqlx::query_as("SELECT name, color FROM tags WHERE id = ?1")
+                .bind(tag.id).fetch_one(&db).await.unwrap();
+        assert_eq!(stored, ("旧标签".to_string(), "#5B8DEF".to_string()));
     }
 }

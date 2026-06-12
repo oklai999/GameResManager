@@ -11,16 +11,19 @@ import {
   Music,
   Plus,
   RotateCw,
+  Tag as TagIcon,
   Trash2,
   Type,
   X,
 } from "lucide-react";
 import { CollectionManager } from "./CollectionManager";
-import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob } from "../types/asset";
+import { TagManager } from "./TagManager";
+import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob, Tag } from "../types/asset";
 
 type Props = {
   folders: LibraryFolder[];
   collections: Collection[];
+  tags: Tag[];
   activeFilter: string;
   selectedFolderId: number | null;
   selectedCollectionId: number | null;
@@ -35,6 +38,8 @@ type Props = {
   onCreateCollection: (name: string) => void;
   onUpdateCollection: (collectionId: number, name: string, description: string) => void;
   onDeleteCollection: (collectionId: number) => void;
+  onUpdateTag: (tagId: number, name: string, color: string) => void;
+  onDeleteTag: (tagId: number) => void;
   isScanning: boolean;
   latestJobs: Record<number, ScanJob | null>;
   folderCounts: Record<number, FolderAssetCounts>;
@@ -52,13 +57,15 @@ function formatDateTime(iso: string | null): string {
 }
 
 export function LibrarySidebar({
-  folders, collections, activeFilter, selectedFolderId, selectedCollectionId,
+  folders, collections, tags, activeFilter, selectedFolderId, selectedCollectionId,
   onFilterChange, onSelectFolder, onSelectCollection, onPickFolder, onScanFolder,
-  onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, onUpdateCollection, onDeleteCollection, isScanning, latestJobs, folderCounts, settingsPanel,
+  onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, onUpdateCollection, onDeleteCollection,
+  onUpdateTag, onDeleteTag, isScanning, latestJobs, folderCounts, settingsPanel,
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
   const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
   const [isCollectionManagerOpen, setIsCollectionManagerOpen] = useState(false);
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const filters = [
     { id: "all", label: "全部资源", icon: List },
     { id: "recent", label: "最近使用", icon: RotateCw },
@@ -282,6 +289,41 @@ export function LibrarySidebar({
             )}
           </section>
         </div>
+      )}
+
+      <div className="panel-heading secondary folder-section-heading">
+        <span>标签</span>
+        <button
+          type="button"
+          className="folder-manager-open-btn"
+          onClick={() => setIsTagManagerOpen(true)}
+          aria-label="管理标签"
+        >
+          管理
+        </button>
+      </div>
+      <div className="folder-list">
+        {tags.map((tag) => (
+          <div
+            className="folder-row"
+            key={tag.id}
+            title={tag.name}
+          >
+            <span className="folder-name">
+              <TagIcon size={14} aria-hidden="true" />
+              {tag.name}
+            </span>
+            <span className="collection-count">{tag.asset_count}</span>
+          </div>
+        ))}
+      </div>
+      {isTagManagerOpen && (
+        <TagManager
+          tags={tags}
+          onClose={() => setIsTagManagerOpen(false)}
+          onUpdate={onUpdateTag}
+          onDelete={onDeleteTag}
+        />
       )}
 
       <div className="panel-heading secondary folder-section-heading">

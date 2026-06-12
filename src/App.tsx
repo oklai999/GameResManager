@@ -7,6 +7,7 @@ import {
   createLibraryFolderFromPath,
   deleteCollection,
   deleteLibraryFolder,
+  deleteTag,
   getFolderAssetCounts,
   getScanSettings,
   latestScanJob,
@@ -16,11 +17,13 @@ import {
   listLibraryFolders,
   listRecentAssetActions,
   listRecentTags,
+  listTags,
   openAssetFile,
   openLibraryFolder,
   pickLibraryFolder,
   recordRecentAssetAction,
   removeAssetsFromCollection,
+  removeTagFromAssets,
   revealAssetInFolder,
   saveScanSettings,
   searchAssetsPage,
@@ -28,6 +31,7 @@ import {
   startScan,
   updateAssetNote,
   updateCollection,
+  updateTag,
 } from "./api/tauri";
 import { AssetGrid } from "./components/AssetGrid";
 import { DetailsPanel } from "./components/DetailsPanel";
@@ -37,7 +41,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
 import { SearchToolbar } from "./components/SearchToolbar";
 import { ToastProvider, useToast } from "./components/ToastHost";
-import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope } from "./types/asset";
+import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope, Tag } from "./types/asset";
 
 const SEARCH_PAGE_SIZE = 200;
 
@@ -92,6 +96,8 @@ function AppInner() {
   const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
   const [recentAssetIds, setRecentAssetIds] = useState<number[]>([]);
   const [recentTags, setRecentTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagRefreshVersion, setTagRefreshVersion] = useState(0);
   const [projectRoot, setProjectRoot] = useState("");
   const searchVersionRef = useRef(0);
 
@@ -108,13 +114,23 @@ function AppInner() {
     }
   }, []);
 
+  const refreshTagState = useCallback(async () => {
+    const [tagList] = await Promise.all([
+      listTags(),
+      loadRecentTags(),
+    ]);
+    setTags(tagList);
+    setTagRefreshVersion((version) => version + 1);
+  }, [loadRecentTags]);
+
   const loadData = useCallback(async () => {
     try {
-      const [assetList, folderList, tagList, collectionList] = await Promise.all([
+      const [assetList, folderList, tagList, collectionList, tagMetaList] = await Promise.all([
         listAssets(),
         listLibraryFolders(),
         listAssetTags(),
         listCollections(),
+        listTags(),
       ]);
       const tagMap = new Map<number, string[]>();
       for (const [assetId, tagName] of tagList) {
@@ -129,6 +145,7 @@ function AppInner() {
       setAssets(assetsWithTags);
       setFolders(folderList);
       setCollections(collectionList);
+      setTags(tagMetaList);
 
       try {
         const actions = await listRecentAssetActions(100);
@@ -261,11 +278,12 @@ function AppInner() {
       const page = await searchAssetsPage(req);
       if (version !== searchVersionRef.current) return;
 
+      const tagList = await listAssetTags();
       const tagMap = new Map<number, string[]>();
-      for (const asset of assets) {
-        if (asset.tags && asset.tags.length > 0) {
-          tagMap.set(asset.id, asset.tags);
-        }
+      for (const [assetId, tagName] of tagList) {
+        const arr = tagMap.get(assetId) ?? [];
+        arr.push(tagName);
+        tagMap.set(assetId, arr);
       }
       const results = page.assets.map((a) => ({
         ...a,
@@ -283,7 +301,7 @@ function AppInner() {
         setIsSearching(false);
       }
     }
-  }, [buildSearchRequest, assets, showError]);
+  }, [buildSearchRequest, showError]);
 
   const handleLoadMore = useCallback(async () => {
     if (isSearching || isLoadingMore || gridAssets.length >= totalCount) return;
@@ -294,11 +312,14 @@ function AppInner() {
       const page = await searchAssetsPage(req);
       if (version !== searchVersionRef.current) return;
 
+      const tagList = await listAssetTags();
+      if (version !== searchVersionRef.current) return;
+
       const tagMap = new Map<number, string[]>();
-      for (const asset of assets) {
-        if (asset.tags && asset.tags.length > 0) {
-          tagMap.set(asset.id, asset.tags);
-        }
+      for (const [assetId, tagName] of tagList) {
+        const arr = tagMap.get(assetId) ?? [];
+        arr.push(tagName);
+        tagMap.set(assetId, arr);
       }
       const nextAssets = page.assets.map((a) => ({
         ...a,
@@ -314,7 +335,7 @@ function AppInner() {
         setIsLoadingMore(false);
       }
     }
-  }, [isSearching, isLoadingMore, gridAssets.length, totalCount, buildSearchRequest, assets, showError]);
+  }, [isSearching, isLoadingMore, gridAssets.length, totalCount, buildSearchRequest, showError]);
 
   useEffect(() => {
     executeSearch();
@@ -401,11 +422,13 @@ function AppInner() {
   const handleApplyTag = useCallback(async (tagName: string, assetIds: number[]) => {
     try {
       await applyTagToAssets(tagName, assetIds);
-      await loadData();
+      await refreshTagState();
+      await executeSearch();
+      showToast("标签已添加", "success");
     } catch (e) {
       showError(e);
     }
-  }, [loadData, showError]);
+  }, [executeSearch, refreshTagState, showError, showToast]);
 
   const handleCreateCollection = useCallback(async (name: string) => {
     try {
@@ -501,6 +524,62 @@ function AppInner() {
     },
     [executeSearch, showError, showToast]
   );
+
+  const handleUpdateTag = useCallback(async (
+    tagId: number,
+    name: string,
+    color: string
+  ) => {
+    try {
+      await updateTag(tagId, name, color);
+      await refreshTagState();
+      await executeSearch();
+      showToast("标签已保存", "success");
+    } catch (e) {
+      showError(e);
+    }
+  }, [executeSearch, refreshTagState, showError, showToast]);
+
+  const handleDeleteTag = useCallback(async (tagId: number) => {
+    try {
+      const deleted = await deleteTag(tagId);
+      if (!deleted) {
+        showToast("标签不存在或已删除", "error");
+        return;
+      }
+      await refreshTagState();
+      await executeSearch();
+      showToast("标签已删除，原始素材未改动", "success");
+    } catch (e) {
+      showError(e);
+    }
+  }, [executeSearch, refreshTagState, showError, showToast]);
+
+  const handleRemoveTag = useCallback(async (
+    tagName: string,
+    assetIds: number[]
+  ) => {
+    const tag = tags.find(
+      (candidate) => candidate.name.toLowerCase() === tagName.toLowerCase()
+    );
+    if (!tag) {
+      showToast("标签不存在或已删除", "error");
+      return;
+    }
+    try {
+      await removeTagFromAssets(tag.id, assetIds);
+      await refreshTagState();
+      await executeSearch();
+      showToast(
+        assetIds.length > 1
+          ? `已从 ${assetIds.length} 个资源解除标签`
+          : "已解除标签",
+        "success"
+      );
+    } catch (e) {
+      showError(e);
+    }
+  }, [executeSearch, refreshTagState, showError, showToast, tags]);
 
   const handleUpdateNote = useCallback((updated: Asset) => {
     setAssets((prev) => prev.map((a) => (a.id === updated.id ? { ...a, note: updated.note } : a)));
@@ -610,6 +689,9 @@ function AppInner() {
         onCreateCollection={handleCreateCollection}
         onUpdateCollection={handleUpdateCollection}
         onDeleteCollection={handleDeleteCollection}
+        tags={tags}
+        onUpdateTag={handleUpdateTag}
+        onDeleteTag={handleDeleteTag}
         isScanning={isScanning}
         latestJobs={latestJobs}
         folderCounts={folderCounts}
@@ -684,6 +766,8 @@ function AppInner() {
         onUpdateNote={handleUpdateNote}
         activeCollectionId={selectedCollectionId}
         onRemoveFromCollection={handleRemoveFromCollection}
+        onRemoveTag={handleRemoveTag}
+        tagRefreshVersion={tagRefreshVersion}
         recentTags={recentTags}
         onCopyText={handleCopyText}
         projectRoot={projectRoot}

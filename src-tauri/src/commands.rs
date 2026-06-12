@@ -114,6 +114,37 @@ pub async fn list_common_tags(
 }
 
 #[tauri::command]
+pub async fn update_tag(
+    db: State<'_, SqlitePool>,
+    tag_id: i64,
+    name: String,
+    color: String,
+) -> Result<crate::models::Tag, CommandError> {
+    db::update_tag(&*db, tag_id, &name, &color)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn remove_tag_from_assets(
+    db: State<'_, SqlitePool>,
+    tag_id: i64,
+    asset_ids: Vec<i64>,
+) -> Result<u64, CommandError> {
+    db::remove_tag_from_assets(&*db, tag_id, &asset_ids)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn delete_tag(
+    db: State<'_, SqlitePool>,
+    tag_id: i64,
+) -> Result<bool, CommandError> {
+    db::delete_tag(&*db, tag_id).await.map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn list_collections(
     db: State<'_, SqlitePool>,
 ) -> Result<Vec<crate::models::Collection>, CommandError> {

@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LibrarySidebar } from "./LibrarySidebar";
-import type { Collection } from "../types/asset";
+import type { Collection, Tag } from "../types/asset";
 
 function makeFolder(id: number, name: string) {
   return { id, name, path: `C:/${name.toLowerCase()}`, created_at: "", last_scanned_at: null, is_enabled: true };
@@ -36,6 +36,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -66,6 +69,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -98,6 +104,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -131,6 +140,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -165,6 +177,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -197,6 +212,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -228,6 +246,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -261,6 +282,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -297,6 +321,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -331,6 +358,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -369,6 +399,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -400,6 +433,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -430,6 +466,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -461,6 +500,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -495,6 +537,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -527,6 +572,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -565,6 +613,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -618,6 +669,9 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
@@ -650,11 +704,47 @@ describe("LibrarySidebar", () => {
         settingsPanel={null}
         onUpdateCollection={vi.fn()}
         onDeleteCollection={vi.fn()}
+        tags={[]}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
       />
     );
 
     expect(screen.getByText("12")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "管理集合" }));
     expect(screen.getByRole("dialog", { name: "集合管理" })).toBeInTheDocument();
+  });
+
+  it("opens the tag manager", async () => {
+    render(
+      <LibrarySidebar
+        folders={[]}
+        collections={[]}
+        tags={[{ id: 1, name: "角色", color: "#5B8DEF", asset_count: 3 }]}
+        activeFilter="all"
+        selectedFolderId={null}
+        selectedCollectionId={null}
+        onFilterChange={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onSelectCollection={vi.fn()}
+        onPickFolder={vi.fn()}
+        onScanFolder={vi.fn()}
+        onCancelScan={vi.fn()}
+        onDeleteFolder={vi.fn()}
+        onOpenFolder={vi.fn()}
+        onCreateCollection={vi.fn()}
+        onUpdateCollection={vi.fn()}
+        onDeleteCollection={vi.fn()}
+        onUpdateTag={vi.fn()}
+        onDeleteTag={vi.fn()}
+        isScanning={false}
+        latestJobs={{}}
+        folderCounts={{}}
+        settingsPanel={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "管理标签" }));
+    expect(screen.getByRole("dialog", { name: "标签管理" })).toBeInTheDocument();
   });
 });

@@ -671,12 +671,29 @@ body {
 }
 
 .tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 4px 10px;
   border-radius: 12px;
   background: #1b2840;
   border: 1px solid #2d3447;
   color: #c5ccda;
   font-size: 12px;
+}
+
+.tag-chip-remove {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.tag-chip-remove:hover {
+  color: #e0556a;
 }
 
 .tag-form {
@@ -1020,4 +1037,24 @@ body {
 button.danger {
   color: #ff9aa8;
   border-color: #6d3540;
+}
+
+.tag-manager-list-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-manager-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.tag-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }

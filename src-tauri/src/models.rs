@@ -71,6 +71,7 @@ pub struct Tag {
     pub id: i64,
     pub name: String,
     pub color: String,
+    pub asset_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

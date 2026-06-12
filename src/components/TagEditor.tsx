@@ -5,9 +5,10 @@ type Props = {
   existingTags: string[];
   recentTags?: string[];
   onApply: (tagName: string) => void;
+  onRemove: (tagName: string) => void;
 };
 
-export function TagEditor({ existingTags, recentTags = [], onApply }: Props) {
+export function TagEditor({ existingTags, recentTags = [], onApply, onRemove }: Props) {
   const [input, setInput] = useState("");
   const [allTags, setAllTags] = useState<string[]>([]);
 
@@ -43,7 +44,15 @@ export function TagEditor({ existingTags, recentTags = [], onApply }: Props) {
       <div className="tag-chips">
         {existingTags.map((tag) => (
           <span key={tag} className="tag-chip">
-            {tag}
+            <span>{tag}</span>
+            <button
+              type="button"
+              className="tag-chip-remove"
+              aria-label={`移除标签 ${tag}`}
+              onClick={() => onRemove(tag)}
+            >
+              ×
+            </button>
           </span>
         ))}
       </div>

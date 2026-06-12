@@ -250,6 +250,22 @@ Use a fixture folder with the newly covered formats.
 
 Status: Passed manually on 2026-06-11.
 
+---
+
+## v0.9.0 Tag Management Smoke Test
+
+- [ ] Create or apply tag `角色` to two assets.
+- [ ] Open tag management and confirm `角色` shows an asset count of `2`.
+- [ ] Rename `角色` to `主角`, change its color to `#22AA88`, and confirm both values persist after reopening the manager.
+- [ ] Search for `主角` in tag scope and confirm the two assets are returned.
+- [ ] Create tag `角色动画`, apply it to one of the same assets, then rename `主角` to `角色动画`.
+- [ ] Confirm the two tags merge into one, the target color is preserved, the asset count has no duplicates, and both assets remain searchable.
+- [ ] Select one asset and remove `角色动画`; confirm only that resource loses the tag and the tag itself remains.
+- [ ] Apply the tag to two assets, select both, and remove the common tag; confirm both relationships are removed.
+- [ ] Delete the tag through the confirmation flow and confirm the tag disappears.
+- [ ] Confirm all source assets still exist at the same paths with unchanged contents and modified times.
+- [ ] Confirm tag deletion, merge, and unlink never delete, move, rename, or modify source files.
+
 - Create a collection named `角色` and confirm it appears with `0` resources.
 - Select two assets and add them to `角色`; confirm the collection count becomes `2`.
 - Select the `角色` collection and confirm only its members appear.

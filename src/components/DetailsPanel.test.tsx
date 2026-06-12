@@ -3,6 +3,10 @@ import userEvent, { UserEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DetailsPanel } from "./DetailsPanel";
 import type { Asset, Collection } from "../types/asset";
+import { getAssetTags, listCommonTags } from "../api/tauri";
+
+const mockedGetAssetTags = vi.mocked(getAssetTags);
+const mockedListCommonTags = vi.mocked(listCommonTags);
 
 vi.mock("../api/tauri", () => ({
   getAssetTags: vi.fn().mockResolvedValue([]),
@@ -63,6 +67,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -82,6 +88,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -105,6 +113,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -128,6 +138,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -148,6 +160,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -176,6 +190,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={onAddToCollection}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -202,6 +218,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={onAddToCollection}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -226,6 +244,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -247,6 +267,8 @@ describe("DetailsPanel", () => {
         onCopyText={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -271,6 +293,8 @@ describe("DetailsPanel", () => {
         onCopyText={onCopyText}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -292,6 +316,8 @@ describe("DetailsPanel", () => {
         onCopyText={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -322,6 +348,8 @@ describe("DetailsPanel", () => {
         onUpdateNote={onUpdateNote}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -352,6 +380,8 @@ describe("DetailsPanel", () => {
         onCopyText={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -385,6 +415,8 @@ describe("DetailsPanel", () => {
         projectRoot="C:/project"
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -418,6 +450,8 @@ describe("DetailsPanel", () => {
         projectRoot="C:/project"
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -440,6 +474,8 @@ describe("DetailsPanel", () => {
         projectRoot="C:/project"
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -474,6 +510,8 @@ describe("DetailsPanel", () => {
         projectRoot="C:/project"
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -493,6 +531,8 @@ describe("DetailsPanel", () => {
         projectRoot="C:/other"
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -515,6 +555,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={1}
         onRemoveFromCollection={onRemoveFromCollection}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -538,6 +580,8 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={1}
         onRemoveFromCollection={onRemoveFromCollection}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
@@ -560,10 +604,137 @@ describe("DetailsPanel", () => {
         onAddToCollection={vi.fn()}
         activeCollectionId={null}
         onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
       />
     );
 
     expect(await screen.findByText("1.png")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "从当前集合移出" })).not.toBeInTheDocument();
+  });
+
+  it("removes a tag from one selected asset", async () => {
+    mockedGetAssetTags.mockResolvedValue(["角色"]);
+    const onRemoveTag = vi.fn();
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={onRemoveTag}
+        tagRefreshVersion={0}
+      />
+    );
+    await screen.findByRole("button", { name: "移除标签 角色" });
+    await userEvent.click(screen.getByRole("button", { name: "移除标签 角色" }));
+    expect(onRemoveTag).toHaveBeenCalledWith("角色", [1]);
+  });
+
+  it("removes a common tag from all selected assets", async () => {
+    mockedListCommonTags.mockResolvedValue(["角色"]);
+    const onRemoveTag = vi.fn();
+    render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1), makeAsset(2)]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={onRemoveTag}
+        tagRefreshVersion={0}
+      />
+    );
+    await screen.findByRole("button", { name: "移除标签 角色" });
+    await userEvent.click(screen.getByRole("button", { name: "移除标签 角色" }));
+    expect(onRemoveTag).toHaveBeenCalledWith("角色", [1, 2]);
+  });
+
+  it("reloads selected tags when tagRefreshVersion changes", async () => {
+    mockedGetAssetTags.mockResolvedValueOnce(["旧标签"]).mockResolvedValueOnce(["新标签"]);
+    const { rerender } = render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+      />
+    );
+    expect(await screen.findByText("旧标签")).toBeInTheDocument();
+    rerender(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1)]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={1}
+      />
+    );
+    expect(await screen.findByText("新标签")).toBeInTheDocument();
+  });
+
+  it("reloads common tags when same-length multi-selection changes", async () => {
+    mockedListCommonTags.mockResolvedValueOnce(["角色"]).mockResolvedValueOnce(["特效"]);
+    const { rerender } = render(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1), makeAsset(2)]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+      />
+    );
+    expect(await screen.findByRole("button", { name: "移除标签 角色" })).toBeInTheDocument();
+    rerender(
+      <DetailsPanel
+        selectedAssets={[makeAsset(1), makeAsset(3)]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        collections={[]}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+      />
+    );
+    expect(await screen.findByRole("button", { name: "移除标签 特效" })).toBeInTheDocument();
+    expect(mockedListCommonTags).toHaveBeenLastCalledWith([1, 3]);
   });
 });
