@@ -145,7 +145,7 @@ describe("LibrarySidebar", () => {
       />
     );
 
-    await userEvent.click(screen.getByText("扫描"));
+    await userEvent.click(screen.getByRole("button", { name: "扫描 Assets" }));
 
     expect(onScanFolder).toHaveBeenCalledWith(1);
   });
@@ -222,7 +222,7 @@ describe("LibrarySidebar", () => {
       />
     );
 
-    await userEvent.click(screen.getByText("扫描"));
+    await userEvent.click(screen.getByRole("button", { name: "扫描 Assets" }));
 
     expect(onScanFolder).toHaveBeenCalledWith(1);
     expect(onSelectFolder).not.toHaveBeenCalled();
@@ -259,7 +259,7 @@ describe("LibrarySidebar", () => {
       />
     );
 
-    const btn = screen.getByText("扫描") as HTMLButtonElement;
+    const btn = screen.getByRole("button", { name: "扫描 Assets" }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
   });
 
@@ -456,7 +456,7 @@ describe("LibrarySidebar", () => {
       />
     );
 
-    await userEvent.click(screen.getByTitle("打开文件夹"));
+    await userEvent.click(screen.getByRole("button", { name: "打开文件夹 Assets" }));
 
     expect(onOpenFolder).toHaveBeenCalledWith(folder);
   });

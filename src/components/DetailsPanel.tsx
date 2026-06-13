@@ -224,7 +224,10 @@ export function DetailsPanel({
             )}
               <span>修改时间</span><strong>{formatDateTime(asset.modified_at)}</strong>
             </div>
-            <div className="detail-row path">{asset.absolute_path}</div>
+            <div className="detail-path-block">
+              <span className="detail-path-label">文件路径</span>
+              <div className="detail-row path">{asset.absolute_path}</div>
+            </div>
             {onCopyText && (
               <>
                 <div className="path-variant-actions">
@@ -257,7 +260,10 @@ export function DetailsPanel({
               <div className="detail-row error-text">缩略图错误：{asset.thumbnail_error}</div>
             )}
             {asset.thumbnail_status === "ready" && asset.thumbnail_path && (
-              <div className="detail-row path">缩略图缓存：{asset.thumbnail_path}</div>
+              <details className="thumbnail-cache-details">
+                <summary>缩略图缓存</summary>
+                <div className="detail-row path">{asset.thumbnail_path}</div>
+              </details>
             )}
           </section>
         )}

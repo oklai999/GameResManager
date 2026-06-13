@@ -163,10 +163,9 @@ export function LibrarySidebar({
                         <button
                           className="open-folder-btn"
                           onClick={(e) => { e.stopPropagation(); onOpenFolder(folder); }}
-                          title="打开文件夹"
+                          aria-label={`打开文件夹 ${folder.name}`}
                         >
                           <FolderOpen size={13} aria-hidden="true" />
-                          打开
                         </button>
                         {isRunning ? (
                           <button
@@ -180,11 +179,10 @@ export function LibrarySidebar({
                           <button
                             className="scan-btn"
                             onClick={(e) => { e.stopPropagation(); onScanFolder(folder.id); }}
-                            title="扫描"
+                            aria-label={`扫描 ${folder.name}`}
                             disabled={isScanning}
                           >
                             <RotateCw size={13} aria-hidden="true" />
-                            扫描
                           </button>
                         )}
                         <button

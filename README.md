@@ -132,12 +132,14 @@ cargo check
 
 Current local verification baseline:
 
-- `npm test`: 124 frontend tests passing.
-- `npm run build`: succeeds.
-- `cargo test`: 107 Rust unit tests plus the build script integration test passing.
-- `cargo check`: succeeds when the local MSVC and Windows SDK environment is configured.
+- `npm test`: 125 frontend tests passing.
+- `npm run build`: succeeds with versioned `v0_9_1` CSS and JavaScript assets.
+- `cargo test`: 136 Rust unit tests plus the build script integration test passing.
+- `cargo check`: succeeds with the local MSVC and Windows SDK environment.
+- `npm run tauri build`: succeeds and produces the `0.9.1` x64 NSIS installer.
 
 Manual smoke checks live in [tests/smoke/README.md](tests/smoke/README.md).
+The v0.9.1 release verification record lives in [docs/releases/v0.9.1.md](docs/releases/v0.9.1.md).
 
 ## Project Structure
 

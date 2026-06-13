@@ -96,7 +96,6 @@ export function SearchToolbar({
         ) : (
           <LayoutGrid size={16} aria-hidden="true" />
         )}
-        {density === "compact" ? "舒适网格" : "紧凑网格"}
       </button>
     </header>
   );

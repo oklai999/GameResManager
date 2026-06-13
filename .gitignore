@@ -5,7 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
-releases/
+/releases/
 src-tauri/target/
 
 # Local tool state

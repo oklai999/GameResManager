@@ -11,8 +11,8 @@ type DensityMetrics = {
 
 function densityMetrics(density: GridDensity): DensityMetrics {
   return density === "compact"
-    ? { cardWidth: 152, cardHeight: 210, gap: 10 }
-    : { cardWidth: 176, cardHeight: 238, gap: 12 };
+    ? { cardWidth: 152, cardHeight: 178, gap: 10 }
+    : { cardWidth: 176, cardHeight: 210, gap: 12 };
 }
 
 const OVERSCAN_ROWS = 3;

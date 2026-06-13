@@ -143,7 +143,8 @@ describe("DetailsPanel", () => {
       />
     );
 
-    expect(await screen.findByText("缩略图缓存：C:/cache/icon.webp")).toBeInTheDocument();
+    expect(await screen.findByText("缩略图缓存")).toBeInTheDocument();
+    expect(screen.getByText("C:/cache/icon.webp")).toBeInTheDocument();
   });
 
   it("calls onApplyTag when tag is submitted in single mode", async () => {

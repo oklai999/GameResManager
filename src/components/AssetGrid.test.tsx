@@ -365,7 +365,7 @@ describe("AssetGrid", () => {
     fireEvent.scroll(viewport);
 
     expect(screen.queryByText("asset-1.png")).not.toBeInTheDocument();
-    expect(screen.getByText("asset-21.png")).toBeInTheDocument();
+    expect(screen.getByText("asset-25.png")).toBeInTheDocument();
   });
 
   it("recovers from deep scroll when the list shortens", () => {
@@ -431,9 +431,9 @@ describe("AssetGrid", () => {
     viewport.scrollTop = 2000;
     fireEvent.scroll(viewport);
 
-    await userEvent.click(screen.getByText("asset-21.png"));
+    await userEvent.click(screen.getByText("asset-25.png"));
 
-    expect(onSelectionChange).toHaveBeenCalledWith([21]);
+    expect(onSelectionChange).toHaveBeenCalledWith([25]);
   });
 
   it("resets scroll when resetKey changes even with same first asset id", () => {
@@ -522,7 +522,7 @@ describe("AssetGrid", () => {
 
     const card = screen.getByTitle("C:/assets/icon.png");
     expect(card.style.width).toBe("176px");
-    expect(card.style.height).toBe("238px");
+    expect(card.style.height).toBe("210px");
   });
 
   it("renders compact card dimensions when density is compact", () => {
@@ -539,6 +539,6 @@ describe("AssetGrid", () => {
 
     const card = screen.getByTitle("C:/assets/icon.png");
     expect(card.style.width).toBe("152px");
-    expect(card.style.height).toBe("210px");
+    expect(card.style.height).toBe("178px");
   });
 });

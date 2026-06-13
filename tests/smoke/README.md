@@ -297,3 +297,15 @@ Status: Passed manually on 2026-06-11.
 - [ ] Resize the window down to 1100px width and confirm all four regions remain usable without overlapping.
 - [ ] Confirm keyboard focus is visible on rail, toolbar, cards, inspector controls and dialogs.
 - [ ] Confirm no source file is deleted, moved, renamed, modified or written to.
+
+### v0.9.1 Release Verification Record
+
+Verification run on 2026-06-13:
+
+- [x] Development desktop application starts successfully through `npm run tauri dev`.
+- [x] Vite reports ready, Rust finishes the dev build, and `game-resource-manager.exe` remains responsive.
+- [x] Startup logs contain no blank-screen, panic, or runtime command error.
+- [x] Frontend, Rust, production build, Tauri bundle, and release packaging checks pass.
+- [ ] Repeat the interactive checks above on the final package. Automated Windows desktop control was unavailable because the installed `@oai/sky` package does not export its Computer Use client module.
+
+The unchecked interaction items remain the final manual acceptance checklist. Startup success is not treated as proof that every visual state and interaction passed.
