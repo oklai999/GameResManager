@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="720" viewBox="0 0 1500 720">
+  <style>
+    .bg{fill:#111318}.panel{fill:#181c23;stroke:#343c49;stroke-width:2}.rail{fill:#0d0f13}.side{fill:#15181e}.work{fill:#181b22}.inspect{fill:#12161c}
+    .title{fill:#edf1f7;font:700 25px "Microsoft YaHei UI",sans-serif}.sub{fill:#9ba7b8;font:14px "Microsoft YaHei UI",sans-serif}
+    .h{fill:#edf1f7;font:700 16px "Microsoft YaHei UI",sans-serif}.t{fill:#cbd3df;font:12px "Microsoft YaHei UI",sans-serif}.muted{fill:#8490a1;font:11px "Microsoft YaHei UI",sans-serif}
+    .accent{fill:#253247;stroke:#5d8fd8}.box{fill:#202630;stroke:#384251}.preview{fill:#101923;stroke:#4d78aa}.good{fill:#75c28e;font:700 13px "Microsoft YaHei UI",sans-serif}
+  </style>
+  <rect class="bg" width="1500" height="720"/>
+  <text class="title" x="40" y="45">最近使用 + 音视频预览：工作台关系</text>
+  <text class="sub" x="40" y="72">比较最近记录的信息密度，以及播放时是否会打断找资源。</text>
+
+  <g transform="translate(40 105)">
+    <rect class="panel" width="445" height="535" rx="10"/>
+    <text class="h" x="18" y="30">A. 轻量增强</text>
+    <g transform="translate(18 52)">
+      <rect class="rail" width="34" height="315"/><rect class="side" x="34" width="105" height="315"/><rect class="work" x="139" width="165" height="315"/><rect class="inspect" x="304" width="105" height="315"/>
+      <text class="t" x="45" y="28">最近使用</text><text class="muted" x="45" y="58">全部动作</text><text class="muted" x="45" y="80">打开文件</text><text class="muted" x="45" y="102">复制路径</text>
+      <rect class="box" x="150" y="15" width="142" height="25" rx="3"/><text class="muted" x="160" y="32">搜索最近资源</text>
+      <rect class="box" x="150" y="53" width="65" height="65"/><rect class="box" x="226" y="53" width="65" height="65"/><rect class="box" x="150" y="130" width="65" height="65"/><rect class="box" x="226" y="130" width="65" height="65"/>
+      <text class="t" x="314" y="28">sound.wav</text><rect class="preview" x="314" y="48" width="85" height="70"/><text class="t" x="336" y="88">▶ 00:12</text>
+    </g>
+    <text class="t" x="18" y="400">最近使用仍是资源网格筛选，音视频在右侧播放。</text>
+    <text class="muted" x="18" y="425">优点：改动最小。缺点：动作时间和类型不够醒目。</text>
+  </g>
+
+  <g transform="translate(527 105)">
+    <rect class="panel" width="445" height="535" rx="10" stroke="#74a5ee"/>
+    <text class="h" x="18" y="30">B. 分工清晰</text><text class="good" x="322" y="30">推荐</text>
+    <g transform="translate(18 52)">
+      <rect class="rail" width="34" height="315"/><rect class="side" x="34" width="112" height="315"/><rect class="work" x="146" width="158" height="315"/><rect class="inspect" x="304" width="105" height="315"/>
+      <text class="t" x="45" y="28">最近使用</text><rect class="accent" x="43" y="43" width="94" height="27" rx="3"/><text class="t" x="52" y="61">全部动态 48</text><text class="muted" x="45" y="91">今天 13</text><text class="muted" x="45" y="113">本周 35</text>
+      <text class="t" x="157" y="28">活动时间线</text><rect class="box" x="157" y="45" width="136" height="55"/><text class="t" x="165" y="64">sound.wav</text><text class="muted" x="165" y="84">10:42 预览 · 复制路径</text>
+      <rect class="box" x="157" y="112" width="136" height="55"/><text class="t" x="165" y="131">hero.mp4</text><text class="muted" x="165" y="151">昨天 18:21 打开文件</text>
+      <text class="t" x="314" y="28">sound.wav</text><rect class="preview" x="314" y="48" width="85" height="70"/><text class="t" x="322" y="77">▶ 波形</text><text class="muted" x="322" y="98">进度 · 音量</text>
+    </g>
+    <text class="t" x="18" y="400">“最近”是活动时间线；普通资源页保持网格。</text>
+    <text class="muted" x="18" y="425">音视频只在右侧播放，切换资源即停止，边界清晰。</text>
+  </g>
+
+  <g transform="translate(1014 105)">
+    <rect class="panel" width="445" height="535" rx="10"/>
+    <text class="h" x="18" y="30">C. 媒体中心</text>
+    <g transform="translate(18 52)">
+      <rect class="rail" width="34" height="315"/><rect class="side" x="34" width="105" height="315"/><rect class="work" x="139" width="270" height="315"/>
+      <text class="t" x="45" y="28">媒体中心</text><rect class="accent" x="43" y="43" width="87" height="27" rx="3"/><text class="t" x="51" y="61">最近播放</text><text class="muted" x="45" y="91">音频</text><text class="muted" x="45" y="113">视频</text><text class="muted" x="45" y="135">播放队列</text>
+      <rect class="preview" x="153" y="18" width="242" height="155"/><text class="h" x="240" y="88">hero.mp4</text><text class="muted" x="230" y="110">大型中央预览</text>
+      <rect class="box" x="153" y="188" width="55" height="55"/><rect class="box" x="216" y="188" width="55" height="55"/><rect class="box" x="279" y="188" width="55" height="55"/><rect class="box" x="342" y="188" width="53" height="55"/>
+      <rect class="box" x="139" y="268" width="270" height="47"/><text class="t" x="170" y="297">⏮　▶　⏭　━━━━●━━　音量</text>
+    </g>
+    <text class="t" x="18" y="400">中央大预览、最近播放和播放队列合并管理。</text>
+    <text class="muted" x="18" y="425">体验最强，但产品会偏向媒体播放器，范围明显扩大。</text>
+  </g>
+
+  <text class="sub" x="40" y="687">请选择 A / B / C。建议 B：两个阶段可独立交付，又不会削弱“找资源最快”的主目标。</text>
+</svg>
