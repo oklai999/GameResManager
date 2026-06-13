@@ -309,3 +309,36 @@ Verification run on 2026-06-13:
 - [ ] Repeat the interactive checks above on the final package. Automated Windows desktop control was unavailable because the installed `@oai/sky` package does not export its Computer Use client module.
 
 The unchecked interaction items remain the final manual acceptance checklist. Startup success is not treated as proof that every visual state and interaction passed.
+
+## v0.10.0 Recent Activity Timeline Smoke Test
+
+- [ ] Open one asset from the details panel.
+- [ ] Reveal a different asset in its containing folder.
+- [ ] Copy a third asset's absolute path.
+- [ ] Click `最近使用` in the navigation rail and confirm the three assets appear as folded cards, ordered by latest action time (most recent first).
+- [ ] Confirm the same resource appears only once even if multiple actions were performed on it.
+- [ ] Click the expand button on a folded card and confirm action details are shown with correct action type labels and timestamps.
+- [ ] Click the collapse button and confirm details are hidden.
+- [ ] Click `今天` and confirm only today's actions remain visible (or the timeline becomes empty if no actions occurred today).
+- [ ] Click `最近 7 天` and confirm the range widens.
+- [ ] Click an action type filter such as `打开文件` and confirm only matching actions remain visible.
+- [ ] Switch `时间范围` and `动作类型` filters back to `全部` and confirm all recorded activities return.
+- [ ] Click `加载更多` if more than one page of activity exists and confirm additional folded cards append without clearing existing ones.
+- [ ] Select one recent card and confirm the right details panel shows the asset path, type, size, and action buttons.
+- [ ] Double-click an available asset card and confirm it opens.
+- [ ] Mark an asset as missing (move/rename its source file outside the app, then rescan its folder) and confirm the missing resource still appears in the timeline with disabled open action.
+- [ ] Restart the app, reopen `最近使用`, and confirm recent activity is loaded from local app data.
+- [ ] Confirm `最近使用` does not show a `SearchToolbar`, `FilterPanel`, `ActiveFilterChips`, or asset-grid footer.
+- [ ] Confirm switching to `资源库`, `类型`, `标签`, or `集合` restores the existing search toolbar and virtual asset grid.
+- [ ] Confirm opening, revealing, copying, and filtering recent activities does not delete, move, rename, or modify any source asset file.
+
+### v0.10.0 Release Verification Record
+
+Verification run on 2026-06-13:
+
+- [ ] Development desktop application starts successfully through `npm run tauri dev`.
+- [ ] Recent timeline renders folded cards, expands details, applies filters, and loads more pages.
+- [ ] Source asset files remain untouched during all recent-activity interactions.
+- [ ] Automated metadata, frontend, Rust, and production build checks pass.
+
+Automated GUI interaction was unavailable in this headless environment: `npm run tauri dev` compiled successfully and launched `game-resource-manager.exe`, but the process produced no window or further logs because no display server was present. The interactive checklist items above remain the final manual acceptance checklist for a workstation with a display.

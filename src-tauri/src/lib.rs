@@ -30,6 +30,7 @@ pub fn run() {
             })?;
             let ensure_pool = pool.clone();
             let cleanup_pool = pool.clone();
+            let activity_cleanup_pool = pool.clone();
             app.manage(pool);
 
             let thumbnail_dir = app_dir.join("thumbnails");
@@ -48,6 +49,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = db::cleanup_old_scan_jobs(&cleanup_pool, 10).await {
                     eprintln!("Failed to cleanup old scan jobs: {}", e);
+                }
+            });
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = db::cleanup_recent_asset_actions(&activity_cleanup_pool).await {
+                    eprintln!("Failed to cleanup recent activity: {}", e);
                 }
             });
 
@@ -92,7 +99,7 @@ pub fn run() {
             commands::open_library_folder,
             commands::get_folder_asset_counts,
             commands::record_recent_asset_action,
-            commands::list_recent_asset_actions,
+            commands::list_recent_activity,
             commands::asset_path_variants
         ])
         .run(tauri::generate_context!())

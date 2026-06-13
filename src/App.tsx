@@ -15,7 +15,7 @@ import {
   listAssetTags,
   listCollections,
   listLibraryFolders,
-  listRecentAssetActions,
+  listRecentActivity,
   listRecentTags,
   listTags,
   openAssetFile,
@@ -39,15 +39,17 @@ import { EmptyState } from "./components/EmptyState";
 import { LibrarySidebar } from "./components/LibrarySidebar";
 import { NavigationRail } from "./components/NavigationRail";
 import type { WorkbenchSection } from "./components/NavigationRail";
+import { RecentActivityTimeline } from "./components/RecentActivityTimeline";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ScanStatusBar } from "./components/ScanStatusBar";
 import { ActiveFilterChips } from "./components/ActiveFilterChips";
 import { FilterPanel } from "./components/FilterPanel";
 import { SearchToolbar } from "./components/SearchToolbar";
 import { ToastProvider, useToast } from "./components/ToastHost";
-import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, ScanJob, ScanSettings, SearchScope, Tag } from "./types/asset";
+import type { Asset, AssetSearchFilters, AssetSearchRequest, AssetSearchSort, Collection, FolderAssetCounts, LibraryFolder, RecentActionType, RecentActivityItem, RecentActivityPeriod, ScanJob, ScanSettings, SearchScope, Tag } from "./types/asset";
 
 const SEARCH_PAGE_SIZE = 200;
+const RECENT_PAGE_SIZE = 40;
 
 const DEFAULT_SEARCH_FILTERS: AssetSearchFilters = {
   min_file_size: null,
@@ -98,7 +100,15 @@ function AppInner() {
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [folderCounts, setFolderCounts] = useState<Record<number, FolderAssetCounts>>({});
-  const [recentAssetIds, setRecentAssetIds] = useState<number[]>([]);
+  const [recentPeriod, setRecentPeriod] = useState<RecentActivityPeriod>("all");
+  const [recentActionType, setRecentActionType] = useState<"all" | RecentActionType>("all");
+  const [recentItems, setRecentItems] = useState<RecentActivityItem[]>([]);
+  const [recentTotalCount, setRecentTotalCount] = useState(0);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recentLoadingMore, setRecentLoadingMore] = useState(false);
+  const recentRequestIdRef = useRef(0);
+  const recentInitialRequestIdRef = useRef(0);
+  const recentLoadMoreRequestIdRef = useRef(0);
   const [recentTags, setRecentTags] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagRefreshVersion, setTagRefreshVersion] = useState(0);
@@ -155,13 +165,6 @@ function AppInner() {
       setCollections(collectionList);
       setTags(tagMetaList);
 
-      try {
-        const actions = await listRecentAssetActions(100);
-        setRecentAssetIds([...new Set(actions.map((action) => action.asset_id))]);
-      } catch {
-        // non-blocking: recent activity is optional
-      }
-
       setLatestJobs(await fetchLatestJobs(folderList));
 
       const counts: Record<number, FolderAssetCounts> = {};
@@ -189,6 +192,53 @@ function AppInner() {
       showError(e);
     }
   }, [folders, showError]);
+
+  const loadRecentActivity = useCallback(async (offset: number = 0) => {
+    if (activeSection !== "recent") return;
+    const requestId = ++recentRequestIdRef.current;
+    if (offset === 0) {
+      recentInitialRequestIdRef.current = requestId;
+      setRecentLoading(true);
+    } else {
+      recentLoadMoreRequestIdRef.current = requestId;
+      setRecentLoadingMore(true);
+    }
+    try {
+      const page = await listRecentActivity({
+        period: recentPeriod,
+        action_type: recentActionType,
+        limit: RECENT_PAGE_SIZE,
+        offset,
+      });
+      if (requestId !== recentRequestIdRef.current) return;
+      if (offset === 0) {
+        setRecentItems(page.items);
+      } else {
+        setRecentItems((prev) => [...prev, ...page.items]);
+      }
+      setRecentTotalCount(page.total_count);
+    } catch (e) {
+      if (requestId !== recentRequestIdRef.current) return;
+      showError(e);
+    } finally {
+      if (offset === 0 && requestId === recentInitialRequestIdRef.current) {
+        setRecentLoading(false);
+      } else if (offset !== 0 && requestId === recentLoadMoreRequestIdRef.current) {
+        setRecentLoadingMore(false);
+      }
+    }
+  }, [activeSection, recentActionType, recentPeriod, showError]);
+
+  const refreshRecentIfVisible = useCallback(() => {
+    if (activeSection === "recent") {
+      void loadRecentActivity(0);
+    }
+  }, [activeSection, loadRecentActivity]);
+
+  const handleLoadMoreRecent = useCallback(() => {
+    if (recentLoading || recentLoadingMore || recentItems.length >= recentTotalCount) return;
+    void loadRecentActivity(recentItems.length);
+  }, [recentLoading, recentLoadingMore, recentItems.length, recentTotalCount, loadRecentActivity]);
 
   useEffect(() => {
     loadData();
@@ -225,6 +275,10 @@ function AppInner() {
   }, [latestJobs, loadData, refreshScanJobs, activeJobId]);
 
   useEffect(() => {
+    loadRecentActivity(0);
+  }, [loadRecentActivity]);
+
+  useEffect(() => {
     getScanSettings()
       .then(setScanSettings)
       .catch(showError);
@@ -257,7 +311,7 @@ function AppInner() {
       search_note: scope.note,
       search_path: scope.path,
       search_tags: scope.tag,
-      asset_type: ["all", "favorites", "missing", "recent"].includes(activeFilter) ? null : activeFilter,
+      asset_type: ["all", "favorites", "missing"].includes(activeFilter) ? null : activeFilter,
       library_folder_id: selectedFolderId,
       collection_id: selectedCollectionId,
       is_favorite: activeFilter === "favorites" ? true : null,
@@ -359,16 +413,14 @@ function AppInner() {
     sort,
   });
 
-  const displayAssets = activeFilter === "recent"
-    ? recentAssetIds
-        .map((id) => assets.find((a) => a.id === id))
-        .filter(Boolean) as Asset[]
-    : gridAssets;
-  const displayedTotalCount = activeFilter === "recent" ? displayAssets.length : totalCount;
-  const canLoadMore = activeFilter !== "recent" && displayAssets.length < totalCount;
+  const displayAssets = gridAssets;
+  const displayedTotalCount = totalCount;
+  const canLoadMore = displayAssets.length < totalCount;
 
   const selectedAssets = selectedIds
     .map((id) => {
+      const fromRecent = recentItems.find((item) => item.asset.id === id)?.asset;
+      if (fromRecent) return fromRecent;
       const fromGrid = gridAssets.find((a) => a.id === id);
       if (fromGrid) return fromGrid;
       return assets.find((a) => a.id === id);
@@ -597,30 +649,26 @@ function AppInner() {
   const handleOpenFile = useCallback(async (asset: Asset) => {
     try {
       await openAssetFile(asset.absolute_path);
-      try {
-        await recordRecentAssetAction(asset.id, "open_file");
-        setRecentAssetIds((prev) => [asset.id, ...prev.filter((id) => id !== asset.id)].slice(0, 100));
-      } catch (e) {
-        console.error("Failed to record recent action", e);
-      }
     } catch (e) {
       showError(e);
+      return;
     }
-  }, [showError]);
+    recordRecentAssetAction(asset.id, "open_file")
+      .then(() => refreshRecentIfVisible())
+      .catch((e) => console.error("Failed to record recent action", e));
+  }, [showError, refreshRecentIfVisible]);
 
   const handleRevealFile = useCallback(async (asset: Asset) => {
     try {
       await revealAssetInFolder(asset.absolute_path);
-      try {
-        await recordRecentAssetAction(asset.id, "reveal_folder");
-        setRecentAssetIds((prev) => [asset.id, ...prev.filter((id) => id !== asset.id)].slice(0, 100));
-      } catch (e) {
-        console.error("Failed to record recent action", e);
-      }
     } catch (e) {
       showError(e);
+      return;
     }
-  }, [showError]);
+    recordRecentAssetAction(asset.id, "reveal_folder")
+      .then(() => refreshRecentIfVisible())
+      .catch((e) => console.error("Failed to record recent action", e));
+  }, [showError, refreshRecentIfVisible]);
 
   const handleDeleteFolder = useCallback(async (folderId: number) => {
     try {
@@ -646,17 +694,15 @@ function AppInner() {
   const handleCopyPath = useCallback(async (asset: Asset) => {
     try {
       await navigator.clipboard.writeText(asset.absolute_path);
-      showToast("路径已复制", "success");
-      try {
-        await recordRecentAssetAction(asset.id, "copy_path");
-        setRecentAssetIds((prev) => [asset.id, ...prev.filter((id) => id !== asset.id)].slice(0, 100));
-      } catch (e) {
-        console.error("Failed to record recent action", e);
-      }
     } catch (e) {
       showToast((e as any)?.message ?? "复制路径失败", "error");
+      return;
     }
-  }, [showToast]);
+    showToast("路径已复制", "success");
+    recordRecentAssetAction(asset.id, "copy_path")
+      .then(() => refreshRecentIfVisible())
+      .catch((e) => console.error("Failed to record recent action", e));
+  }, [showToast, refreshRecentIfVisible]);
 
   const handleWorkbenchSection = useCallback(
     (section: WorkbenchSection) => {
@@ -673,6 +719,20 @@ function AppInner() {
     },
     [activeSection]
   );
+
+  const handleRecentPeriodChange = useCallback((value: RecentActivityPeriod) => {
+    setRecentPeriod(value);
+    setSelectedIds([]);
+    setRecentItems([]);
+    setRecentTotalCount(0);
+  }, []);
+
+  const handleRecentActionTypeChange = useCallback((value: "all" | RecentActionType) => {
+    setRecentActionType(value);
+    setSelectedIds([]);
+    setRecentItems([]);
+    setRecentTotalCount(0);
+  }, []);
 
   const handleCopyText = useCallback(async (text: string) => {
     try {
@@ -711,9 +771,13 @@ function AppInner() {
         hidden={!sidebarOpen}
         selectedFolderId={selectedFolderId}
         selectedCollectionId={selectedCollectionId}
+        recentPeriod={recentPeriod}
+        recentActionType={recentActionType}
         onFilterChange={(f) => { setActiveFilter(f); setSelectedFolderId(null); setSelectedCollectionId(null); setSelectedIds([]); }}
         onSelectFolder={(id) => { setSelectedFolderId(id); setSelectedCollectionId(null); setSelectedIds([]); }}
         onSelectCollection={(id) => { setSelectedCollectionId(id); setSelectedFolderId(null); setSelectedIds([]); }}
+        onRecentPeriodChange={handleRecentPeriodChange}
+        onRecentActionTypeChange={handleRecentActionTypeChange}
         onPickFolder={handlePickFolder}
         onScanFolder={handleScanFolder}
         onCancelScan={handleCancelScan}
@@ -735,69 +799,96 @@ function AppInner() {
         }
       />
       <section className="workspace">
-        <SearchToolbar
-          query={query}
-          sort={sort}
-          totalCount={displayedTotalCount}
-          filterOpen={filterOpen}
-          density={gridDensity}
-          onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }}
-          onSortChange={handleSortChange}
-          onToggleFilters={() => setFilterOpen((prev) => !prev)}
-          onDensityChange={(d) => setGridDensity(d)}
-        />
-        <FilterPanel
-          open={filterOpen}
-          scope={scope}
-          filters={filters}
-          onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
-          onFiltersChange={handleFiltersChange}
-        />
-        <ActiveFilterChips
-          filters={filters}
-          scope={scope}
-          onFiltersChange={handleFiltersChange}
-          onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
-        />
-        {scanMessage && (
+        {activeSection !== "recent" && scanMessage && (
           <div className="scan-summary" onClick={() => setScanMessage(null)}>
             {scanMessage}
           </div>
         )}
-        {Object.values(latestJobs)
-          .filter(Boolean)
-          .map((job) => (
-            <ScanStatusBar key={job!.id} job={job!} />
-          ))}
-        {!hasFolders ? (
-          <EmptyState variant="no-folders" />
-        ) : isEmptySearch && (hasScanned || showSearchEmpty) ? (
-          <EmptyState variant="no-results" />
-        ) : !hasScanned ? (
-          <EmptyState variant="no-assets" />
+        {activeSection !== "recent" &&
+          Object.values(latestJobs)
+            .filter(Boolean)
+            .map((job) => (
+              <ScanStatusBar key={job!.id} job={job!} />
+            ))}
+        {activeSection === "recent" ? (
+          recentItems.length === 0 && !recentLoading ? (
+            <EmptyState
+              variant={
+                recentPeriod === "all" && recentActionType === "all"
+                  ? "no-recent-activity"
+                  : "no-recent-filter-results"
+              }
+            />
+          ) : (
+            <RecentActivityTimeline
+              items={recentItems}
+              selectedIds={selectedIds}
+              totalCount={recentTotalCount}
+              loading={recentLoading}
+              loadingMore={recentLoadingMore}
+              canLoadMore={recentItems.length < recentTotalCount}
+              onSelectAsset={(id) => setSelectedIds([id])}
+              onOpenAsset={handleOpenFile}
+              onLoadMore={handleLoadMoreRecent}
+            />
+          )
         ) : (
           <>
-            <AssetGrid
-              assets={displayAssets}
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
-              onToggleFavorite={handleToggleFavorite}
-              resetKey={gridResetKey}
+            <SearchToolbar
+              query={query}
+              sort={sort}
+              totalCount={displayedTotalCount}
+              filterOpen={filterOpen}
               density={gridDensity}
+              onQueryChange={(q) => { setQuery(q); setSelectedIds([]); }}
+              onSortChange={handleSortChange}
+              onToggleFilters={() => setFilterOpen((prev) => !prev)}
+              onDensityChange={(d) => setGridDensity(d)}
             />
-            {displayAssets.length > 0 && (
-              <div className="result-footer">
-                <span>已显示 {displayAssets.length} / {displayedTotalCount}</span>
-                {canLoadMore && (
-                  <button
-                    type="button"
-                    onClick={handleLoadMore}
-                    disabled={isSearching || isLoadingMore}
-                  >
-                    {isLoadingMore ? "加载中..." : "加载更多"}
-                  </button>
+            <FilterPanel
+              open={filterOpen}
+              scope={scope}
+              filters={filters}
+              onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
+              onFiltersChange={handleFiltersChange}
+            />
+            <ActiveFilterChips
+              filters={filters}
+              scope={scope}
+              onFiltersChange={handleFiltersChange}
+              onScopeChange={(s) => { setScope(s); setSelectedIds([]); }}
+            />
+            {!hasFolders ? (
+              <EmptyState variant="no-folders" />
+            ) : isEmptySearch && (hasScanned || showSearchEmpty) ? (
+              <EmptyState variant="no-results" />
+            ) : !hasScanned ? (
+              <EmptyState variant="no-assets" />
+            ) : (
+              <>
+                <AssetGrid
+                  assets={displayAssets}
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                  onToggleFavorite={handleToggleFavorite}
+                  resetKey={gridResetKey}
+                  density={gridDensity}
+                />
+                {displayAssets.length > 0 && (
+                  <div className="result-footer">
+                    <span>已显示 {displayAssets.length} / {displayedTotalCount}</span>
+                    {canLoadMore && (
+                      <button
+                        type="button"
+                        onClick={handleLoadMore}
+                        disabled={isSearching || isLoadingMore}
+                      >
+                        {isLoadingMore ? "加载中..." : "加载更多"}
+                      </button>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </>
         )}

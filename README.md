@@ -10,7 +10,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 
 ## Status
 
-- Current version: `0.9.1`
+- Current version: `0.10.0`
 - Platform focus: Windows desktop
 - Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag management, collection management, path variants, and advanced filters
 - License: MIT
@@ -32,7 +32,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 - Manage tag names, colors, counts, merges, safe deletion, and single/batch tag removal.
 - Create, rename, describe, count, delete, and filter collections; add or remove single and multiple assets without changing source files.
 - Edit per-asset notes.
-- Track recent open/reveal/copy-path actions.
+- Track recent open/reveal/copy-path actions in a dedicated timeline, grouped by resource with expandable action details, time-range and action-type filters, and paginated load-more.
 - Open files, reveal containing folders, and copy absolute paths.
 - Optionally derive Godot-style `res://` paths when an explicit project root is provided.
 - Show scan progress, support cancellation, and preserve already-indexed assets when a scan is cancelled.
@@ -132,14 +132,14 @@ cargo check
 
 Current local verification baseline:
 
-- `npm test`: 125 frontend tests passing.
-- `npm run build`: succeeds with versioned `v0_9_1` CSS and JavaScript assets.
-- `cargo test`: 136 Rust unit tests plus the build script integration test passing.
-- `cargo check`: succeeds with the local MSVC and Windows SDK environment.
-- `npm run tauri build`: succeeds and produces the `0.9.1` x64 NSIS installer.
+- `npm test`: 138 frontend tests passing.
+- `npm run build`: succeeds with versioned `v0_10_0` CSS and JavaScript assets.
+- `cargo test`: 147 Rust unit tests plus the build script integration test passing.
+- `cargo check`: succeeds with the local MSVC and Windows SDK environment and one expected `dead_code` warning for the internal `list_recent_asset_actions` repository helper.
+- `npm run tauri build`: produces the `0.10.0` x64 NSIS installer when run separately.
 
 Manual smoke checks live in [tests/smoke/README.md](tests/smoke/README.md).
-The v0.9.1 release verification record lives in [docs/releases/v0.9.1.md](docs/releases/v0.9.1.md).
+The v0.10.0 release verification record lives in [docs/releases/v0.10.0.md](docs/releases/v0.10.0.md).
 
 ## Project Structure
 

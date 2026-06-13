@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LibrarySidebar } from "./LibrarySidebar";
 import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob, Tag } from "../types/asset";
+import type { RecentActivityPeriod, RecentActionType } from "../types/asset";
 import type { WorkbenchSection } from "./NavigationRail";
 
 function makeFolder(id: number, name: string) {
@@ -21,8 +22,10 @@ describe("LibrarySidebar", () => {
     activeFilter: "all",
     activeSection: "library" as WorkbenchSection,
     hidden: false,
-    selectedFolderId: null,
-    selectedCollectionId: null,
+    selectedFolderId: null as number | null,
+    selectedCollectionId: null as number | null,
+    recentPeriod: "all" as RecentActivityPeriod,
+    recentActionType: "all" as "all" | RecentActionType,
     onFilterChange: vi.fn(),
     onSelectFolder: vi.fn(),
     onSelectCollection: vi.fn(),
@@ -36,44 +39,79 @@ describe("LibrarySidebar", () => {
     onDeleteCollection: vi.fn(),
     onUpdateTag: vi.fn(),
     onDeleteTag: vi.fn(),
+    onRecentPeriodChange: vi.fn(),
+    onRecentActionTypeChange: vi.fn(),
     isScanning: false,
     latestJobs: {} as Record<number, ScanJob | null>,
     folderCounts: {} as Record<number, FolderAssetCounts>,
     settingsPanel: null,
   };
 
-  it("shows recent activity filter", () => {
+  it("shows recent period filters", () => {
     render(
       <LibrarySidebar
-        folders={[]}
-        collections={[]}
-        activeFilter="all"
-        activeSection={"recent" as WorkbenchSection}
-        hidden={false}
-        selectedFolderId={null}
-        selectedCollectionId={null}
-        onFilterChange={vi.fn()}
-        onSelectFolder={vi.fn()}
-        onSelectCollection={vi.fn()}
-        onPickFolder={vi.fn()}
-        onScanFolder={vi.fn()}
-        onCancelScan={vi.fn()}
-        onDeleteFolder={vi.fn()}
-        onOpenFolder={vi.fn()}
-        onCreateCollection={vi.fn()}
-        isScanning={false}
-        latestJobs={{}}
-        folderCounts={{}}
-        settingsPanel={null}
-        onUpdateCollection={vi.fn()}
-        onDeleteCollection={vi.fn()}
-        tags={[]}
-        onUpdateTag={vi.fn()}
-        onDeleteTag={vi.fn()}
+        {...defaultProps}
+        activeSection="recent"
+        recentPeriod="all"
+        recentActionType="all"
       />
     );
 
-    expect(screen.getByRole("button", { name: /最近使用/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "今天" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "最近 7 天" })).toBeInTheDocument();
+  });
+
+  it("shows recent action type filters", () => {
+    render(
+      <LibrarySidebar
+        {...defaultProps}
+        activeSection="recent"
+        recentPeriod="all"
+        recentActionType="all"
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "全部动作" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开文件" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开所在目录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制路径" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "媒体预览" })).toBeInTheDocument();
+  });
+
+  it("changes recent period and action filters", async () => {
+    const onPeriod = vi.fn();
+    const onAction = vi.fn();
+    render(
+      <LibrarySidebar
+        {...defaultProps}
+        activeSection="recent"
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={onPeriod}
+        onRecentActionTypeChange={onAction}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "最近 7 天" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制路径" }));
+
+    expect(onPeriod).toHaveBeenCalledWith("week");
+    expect(onAction).toHaveBeenCalledWith("copy_path");
+  });
+
+  it("marks active recent filters", () => {
+    render(
+      <LibrarySidebar
+        {...defaultProps}
+        activeSection="recent"
+        recentPeriod="today"
+        recentActionType="open_file"
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "今天" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "打开文件" })).toHaveClass("active");
   });
 
   it("calls onPickFolder when add folder button is clicked", async () => {
@@ -105,6 +143,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -142,6 +184,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -180,6 +226,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -219,6 +269,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -256,6 +310,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -292,6 +350,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -330,6 +392,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -371,6 +437,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -410,6 +480,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -453,6 +527,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -489,6 +567,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -524,6 +606,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -560,6 +646,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -599,6 +689,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -636,6 +730,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -679,6 +777,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -737,6 +839,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -774,6 +880,10 @@ describe("LibrarySidebar", () => {
         tags={[]}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
       />
     );
 
@@ -806,6 +916,10 @@ describe("LibrarySidebar", () => {
         onDeleteCollection={vi.fn()}
         onUpdateTag={vi.fn()}
         onDeleteTag={vi.fn()}
+        recentPeriod="all"
+        recentActionType="all"
+        onRecentPeriodChange={vi.fn()}
+        onRecentActionTypeChange={vi.fn()}
         isScanning={false}
         latestJobs={{}}
         folderCounts={{}}

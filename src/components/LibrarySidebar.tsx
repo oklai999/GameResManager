@@ -19,7 +19,7 @@ import {
 import { CollectionManager } from "./CollectionManager";
 import { TagManager } from "./TagManager";
 import type { WorkbenchSection } from "./NavigationRail";
-import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob, Tag } from "../types/asset";
+import type { Collection, FolderAssetCounts, LibraryFolder, ScanJob, Tag, RecentActivityPeriod, RecentActionType } from "../types/asset";
 
 type Props = {
   folders: LibraryFolder[];
@@ -30,6 +30,8 @@ type Props = {
   hidden: boolean;
   selectedFolderId: number | null;
   selectedCollectionId: number | null;
+  recentPeriod: RecentActivityPeriod;
+  recentActionType: "all" | RecentActionType;
   onFilterChange: (filter: string) => void;
   onSelectFolder: (folderId: number | null) => void;
   onSelectCollection: (collectionId: number | null) => void;
@@ -43,6 +45,8 @@ type Props = {
   onDeleteCollection: (collectionId: number) => void;
   onUpdateTag: (tagId: number, name: string, color: string) => void;
   onDeleteTag: (tagId: number) => void;
+  onRecentPeriodChange: (value: RecentActivityPeriod) => void;
+  onRecentActionTypeChange: (value: "all" | RecentActionType) => void;
   isScanning: boolean;
   latestJobs: Record<number, ScanJob | null>;
   folderCounts: Record<number, FolderAssetCounts>;
@@ -61,10 +65,10 @@ function formatDateTime(iso: string | null): string {
 
 export function LibrarySidebar({
   folders, collections, tags, activeFilter, activeSection, hidden,
-  selectedFolderId, selectedCollectionId,
+  selectedFolderId, selectedCollectionId, recentPeriod, recentActionType,
   onFilterChange, onSelectFolder, onSelectCollection, onPickFolder, onScanFolder,
   onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, onUpdateCollection, onDeleteCollection,
-  onUpdateTag, onDeleteTag, isScanning, latestJobs, folderCounts, settingsPanel,
+  onUpdateTag, onDeleteTag, onRecentPeriodChange, onRecentActionTypeChange, isScanning, latestJobs, folderCounts, settingsPanel,
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
   const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
@@ -405,13 +409,42 @@ export function LibrarySidebar({
           <>
             <h1>最近使用</h1>
             <p className="recent-description">最近打开或查看的资源将显示在这里。</p>
-            <button
-              className={activeFilter === "recent" ? "nav-item active" : "nav-item"}
-              onClick={() => onFilterChange("recent")}
-            >
-              <RotateCw size={15} aria-hidden="true" />
-              <span>最近使用</span>
-            </button>
+            <div className="panel-heading">时间范围</div>
+            <nav className="nav-list" aria-label="时间范围筛选">
+              {[
+                ["all", "全部"] as const,
+                ["today", "今天"] as const,
+                ["week", "最近 7 天"] as const,
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={recentPeriod === value ? "nav-item active" : "nav-item"}
+                  onClick={() => onRecentPeriodChange(value)}
+                  aria-pressed={recentPeriod === value}
+                >
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="panel-heading secondary">动作类型</div>
+            <nav className="nav-list" aria-label="动作类型筛选">
+              {[
+                ["all", "全部动作"] as const,
+                ["open_file", "打开文件"] as const,
+                ["reveal_folder", "打开所在目录"] as const,
+                ["copy_path", "复制路径"] as const,
+                ["preview_media", "媒体预览"] as const,
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={recentActionType === value ? "nav-item active" : "nav-item"}
+                  onClick={() => onRecentActionTypeChange(value)}
+                  aria-pressed={recentActionType === value}
+                >
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
           </>
         );
       case "settings":

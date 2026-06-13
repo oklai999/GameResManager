@@ -1,6 +1,6 @@
 [package]
 name = "game-resource-manager"
-version = "0.9.1"
+version = "0.10.0"
 description = "Local-first game asset manager"
 authors = ["oklai"]
 edition = "2021"

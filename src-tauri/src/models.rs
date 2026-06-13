@@ -66,6 +66,47 @@ pub struct RecentAssetAction {
     pub created_at: String,
 }
 
+pub const RECENT_ACTION_TYPES: [&str; 4] = [
+    "open_file", "reveal_folder", "copy_path", "preview_media",
+];
+
+pub fn validate_recent_action_type(value: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        RECENT_ACTION_TYPES.contains(&value),
+        "unsupported recent action type"
+    );
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivityRequest {
+    pub period: String,
+    pub action_type: String,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivityItem {
+    pub asset: Asset,
+    pub latest_action_type: String,
+    pub latest_action_at: String,
+    pub action_count: i64,
+    pub open_file_count: i64,
+    pub reveal_folder_count: i64,
+    pub copy_path_count: i64,
+    pub preview_media_count: i64,
+    pub actions: Vec<RecentAssetAction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentActivityResponse {
+    pub items: Vec<RecentActivityItem>,
+    pub total_count: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Tag {
     pub id: i64,

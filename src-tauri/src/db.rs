@@ -1,5 +1,5 @@
 use anyhow::Context;
-use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, SqlitePool};
+use sqlx::{sqlite::{SqliteConnectOptions, SqlitePoolOptions}, QueryBuilder, Row, Sqlite, SqlitePool};
 use std::path::{Path, PathBuf};
 
 pub type Db = SqlitePool;
@@ -1075,21 +1075,36 @@ pub async fn update_asset_note(db: &Db, asset_id: i64, note: &str) -> anyhow::Re
     Ok(row)
 }
 
+pub async fn record_recent_asset_action_at(
+    db: &Db,
+    asset_id: i64,
+    action_type: &str,
+    created_at: &str,
+) -> anyhow::Result<()> {
+    crate::models::validate_recent_action_type(action_type)?;
+    let mut tx = db.begin().await?;
+    sqlx::query(
+        "INSERT INTO recent_asset_actions (asset_id, action_type, created_at)
+         VALUES (?1, ?2, ?3)"
+    )
+    .bind(asset_id)
+    .bind(action_type)
+    .bind(created_at)
+    .execute(&mut *tx)
+    .await?;
+    cleanup_recent_asset_actions_in_tx(&mut tx, created_at).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn record_recent_asset_action(
     db: &Db,
     asset_id: i64,
     action_type: &str,
 ) -> anyhow::Result<()> {
-    let now = Utc::now().to_rfc3339();
-    sqlx::query(
-        "INSERT INTO recent_asset_actions (asset_id, action_type, created_at) VALUES (?1, ?2, ?3)",
-    )
-    .bind(asset_id)
-    .bind(action_type)
-    .bind(&now)
-    .execute(db)
-    .await?;
-    Ok(())
+    record_recent_asset_action_at(
+        db, asset_id, action_type, &Utc::now().to_rfc3339()
+    ).await
 }
 
 pub async fn list_recent_asset_actions(
@@ -1106,6 +1121,209 @@ pub async fn list_recent_asset_actions(
     .fetch_all(db)
     .await
     .map_err(Into::into)
+}
+
+async fn cleanup_recent_asset_actions_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    now: &str,
+) -> anyhow::Result<()> {
+    let now = chrono::DateTime::parse_from_rfc3339(now)?.with_timezone(&Utc);
+    let cutoff = (now - chrono::Duration::days(30)).to_rfc3339();
+    sqlx::query("DELETE FROM recent_asset_actions WHERE created_at < ?1")
+        .bind(cutoff)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(
+        "DELETE FROM recent_asset_actions
+         WHERE id NOT IN (
+           SELECT id FROM recent_asset_actions
+           ORDER BY created_at DESC, id DESC LIMIT 1000
+         )"
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn cleanup_recent_asset_actions_at(db: &Db, now: &str) -> anyhow::Result<()> {
+    let mut tx = db.begin().await?;
+    cleanup_recent_asset_actions_in_tx(&mut tx, now).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn cleanup_recent_asset_actions(db: &Db) -> anyhow::Result<()> {
+    cleanup_recent_asset_actions_at(db, &Utc::now().to_rfc3339()).await
+}
+
+fn recent_activity_bounds(
+    request: &crate::models::RecentActivityRequest,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> anyhow::Result<(Option<String>, Option<String>, i64, i64)> {
+    let lower = match request.period.as_str() {
+        "all" => None,
+        "today" => {
+            let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap()
+                .and_local_timezone(*now.offset()).single()
+                .ok_or_else(|| anyhow::anyhow!("invalid day boundary"))?;
+            Some(start.with_timezone(&Utc).to_rfc3339())
+        }
+        "week" => Some(
+            (now - chrono::Duration::days(7))
+                .with_timezone(&Utc)
+                .to_rfc3339()
+        ),
+        _ => anyhow::bail!("unsupported recent period"),
+    };
+    let action = match request.action_type.as_str() {
+        "all" => None,
+        value => {
+            crate::models::validate_recent_action_type(value)?;
+            Some(value.to_string())
+        }
+    };
+    Ok((lower, action, request.limit.clamp(1, 100), request.offset.max(0)))
+}
+
+pub async fn list_recent_activity_at(
+    db: &Db,
+    request: crate::models::RecentActivityRequest,
+    now: &str,
+) -> anyhow::Result<crate::models::RecentActivityResponse> {
+    let now = chrono::DateTime::parse_from_rfc3339(now)?;
+    let (lower_bound, action_filter, limit, offset) = recent_activity_bounds(&request, now)?;
+    let mut tx = db.begin().await?;
+
+    let mut count_builder = QueryBuilder::<Sqlite>::new(
+        "WITH filtered AS (SELECT asset_id FROM recent_asset_actions WHERE 1=1"
+    );
+    if let Some(lower) = &lower_bound {
+        count_builder.push(" AND created_at >= ").push_bind(lower);
+    }
+    if let Some(action) = &action_filter {
+        count_builder.push(" AND action_type = ").push_bind(action);
+    }
+    count_builder.push(") SELECT COUNT(DISTINCT asset_id) FROM filtered");
+    let total_count: i64 = count_builder
+        .build_query_scalar()
+        .fetch_one(&mut *tx)
+        .await?;
+
+    let mut group_builder = QueryBuilder::<Sqlite>::new(
+        "WITH filtered AS ( \
+         SELECT *, ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY created_at DESC, id DESC) AS rn \
+         FROM recent_asset_actions WHERE 1=1"
+    );
+    if let Some(lower) = &lower_bound {
+        group_builder.push(" AND created_at >= ").push_bind(lower);
+    }
+    if let Some(action) = &action_filter {
+        group_builder.push(" AND action_type = ").push_bind(action);
+    }
+    group_builder.push(
+        ") SELECT asset_id, MAX(created_at) AS latest_action_at, COUNT(*) AS action_count, \
+         SUM(action_type = 'open_file') AS open_file_count, \
+         SUM(action_type = 'reveal_folder') AS reveal_folder_count, \
+         SUM(action_type = 'copy_path') AS copy_path_count, \
+         SUM(action_type = 'preview_media') AS preview_media_count, \
+         MAX(CASE WHEN rn = 1 THEN action_type END) AS latest_action_type \
+         FROM filtered GROUP BY asset_id \
+         ORDER BY latest_action_at DESC, asset_id DESC LIMIT "
+    );
+    group_builder.push_bind(limit).push(" OFFSET ").push_bind(offset);
+
+    let groups = group_builder.build().fetch_all(&mut *tx).await?;
+    let asset_ids: Vec<i64> = groups.iter().map(|r| r.get::<i64, _>("asset_id")).collect();
+
+    let mut asset_map = std::collections::HashMap::<i64, Asset>::new();
+    if !asset_ids.is_empty() {
+        let mut asset_builder = QueryBuilder::<Sqlite>::new(
+            "SELECT id, library_folder_id, absolute_path, file_name, extension, asset_type, file_size, \
+             modified_at, width, height, thumbnail_path, thumbnail_status, thumbnail_error, note, is_favorite, is_missing, \
+             created_at, updated_at FROM assets WHERE id IN ("
+        );
+        let mut separated = asset_builder.separated(",");
+        for id in &asset_ids {
+            separated.push_bind(id);
+        }
+        separated.push_unseparated(")");
+        let assets = asset_builder
+            .build_query_as::<Asset>()
+            .fetch_all(&mut *tx)
+            .await?;
+        for asset in assets {
+            asset_map.insert(asset.id, asset);
+        }
+    }
+
+    let mut details_map = std::collections::HashMap::<i64, Vec<crate::models::RecentAssetAction>>::new();
+    if !asset_ids.is_empty() {
+        let mut detail_builder = QueryBuilder::<Sqlite>::new(
+            "WITH ranked AS ( \
+             SELECT *, ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY created_at DESC, id DESC) AS rn \
+             FROM recent_asset_actions WHERE asset_id IN ("
+        );
+        let mut separated = detail_builder.separated(",");
+        for id in &asset_ids {
+            separated.push_bind(id);
+        }
+        separated.push_unseparated(")");
+        if let Some(lower) = &lower_bound {
+            detail_builder.push(" AND created_at >= ").push_bind(lower);
+        }
+        if let Some(action) = &action_filter {
+            detail_builder.push(" AND action_type = ").push_bind(action);
+        }
+        detail_builder.push(
+            ") SELECT id, asset_id, action_type, created_at FROM ranked WHERE rn <= 50 \
+             ORDER BY asset_id, created_at DESC, id DESC"
+        );
+        let details = detail_builder
+            .build_query_as::<crate::models::RecentAssetAction>()
+            .fetch_all(&mut *tx)
+            .await?;
+        for detail in details {
+            details_map.entry(detail.asset_id).or_default().push(detail);
+        }
+    }
+
+    tx.commit().await?;
+
+    let mut items = Vec::new();
+    for row in groups {
+        let asset_id = row.get::<i64, _>("asset_id");
+        let asset = asset_map.remove(&asset_id)
+            .ok_or_else(|| anyhow::anyhow!("asset {} not found", asset_id))?;
+        items.push(crate::models::RecentActivityItem {
+            asset,
+            latest_action_type: row.get::<String, _>("latest_action_type"),
+            latest_action_at: row.get::<String, _>("latest_action_at"),
+            action_count: row.get::<i64, _>("action_count"),
+            open_file_count: row.get::<i64, _>("open_file_count"),
+            reveal_folder_count: row.get::<i64, _>("reveal_folder_count"),
+            copy_path_count: row.get::<i64, _>("copy_path_count"),
+            preview_media_count: row.get::<i64, _>("preview_media_count"),
+            actions: details_map.remove(&asset_id).unwrap_or_default(),
+        });
+    }
+
+    Ok(crate::models::RecentActivityResponse {
+        items,
+        total_count,
+        limit,
+        offset,
+    })
+}
+
+pub async fn list_recent_activity(
+    db: &Db,
+    request: crate::models::RecentActivityRequest,
+) -> anyhow::Result<crate::models::RecentActivityResponse> {
+    list_recent_activity_at(
+        db,
+        request,
+        &chrono::Local::now().fixed_offset().to_rfc3339(),
+    ).await
 }
 
 #[cfg(test)]
@@ -1883,6 +2101,360 @@ mod recent_action_tests {
         assert_eq!(actions.len(), 1);
         assert_eq!(actions[0].asset_id, asset_id);
         assert_eq!(actions[0].action_type, "copy_path");
+    }
+}
+
+#[cfg(test)]
+mod recent_activity_tests {
+    use super::*;
+
+    async fn setup_db() -> Db {
+        let options = SqliteConnectOptions::new()
+            .filename(":memory:")
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE library_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_scanned_at TEXT,
+                is_enabled INTEGER NOT NULL DEFAULT 1
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                library_folder_id INTEGER NOT NULL,
+                absolute_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                thumbnail_path TEXT,
+                thumbnail_status TEXT NOT NULL DEFAULT 'none',
+                thumbnail_error TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (library_folder_id) REFERENCES library_folders(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "CREATE TABLE recent_asset_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+            )"
+        ).execute(&pool).await.unwrap();
+        pool
+    }
+
+    async fn insert_asset(db: &Db, file_name: &str, is_missing: bool) -> i64 {
+        let path = "C:/assets";
+        let folder_id: i64 = match sqlx::query_as::<_, (i64,)>(
+            "SELECT id FROM library_folders WHERE path = ?1"
+        )
+        .bind(path)
+        .fetch_one(db)
+        .await
+        {
+            Ok(row) => row.0,
+            Err(_) => create_library_folder(db, "fixture", path).await.unwrap().id,
+        };
+        let missing_flag: i64 = if is_missing { 1 } else { 0 };
+        sqlx::query(
+            "INSERT INTO assets (
+                library_folder_id, absolute_path, file_name, extension, asset_type,
+                modified_at, created_at, updated_at, is_missing
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+        )
+        .bind(folder_id)
+        .bind(format!("C:/assets/{}", file_name))
+        .bind(file_name)
+        .bind("wav")
+        .bind("audio")
+        .bind("2024-01-01T00:00:00Z")
+        .bind("2024-01-01T00:00:00Z")
+        .bind("2024-01-01T00:00:00Z")
+        .bind(missing_flag)
+        .execute(db).await.unwrap();
+        sqlx::query_as::<_, (i64,)>("SELECT id FROM assets WHERE absolute_path = ?1")
+            .bind(format!("C:/assets/{}", file_name))
+            .fetch_one(db).await.unwrap().0
+    }
+
+    async fn insert_activity_series(db: &Db, asset_id: i64, count: i64, created_at: &str) {
+        for _ in 0..count {
+            record_recent_asset_action_at(db, asset_id, "copy_path", created_at)
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn seed_action(db: &Db, asset_id: i64, action_type: &str, created_at: &str) {
+        record_recent_asset_action_at(db, asset_id, action_type, created_at)
+            .await
+            .unwrap();
+    }
+
+    async fn request_page(
+        db: &Db,
+        period: &str,
+        action_type: &str,
+        now: &str,
+    ) -> crate::models::RecentActivityResponse {
+        list_recent_activity_at(
+            db,
+            crate::models::RecentActivityRequest {
+                period: period.into(),
+                action_type: action_type.into(),
+                limit: 10,
+                offset: 0,
+            },
+            now,
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn request_page_with_limit(
+        db: &Db,
+        limit: i64,
+        offset: i64,
+    ) -> crate::models::RecentActivityResponse {
+        list_recent_activity_at(
+            db,
+            crate::models::RecentActivityRequest {
+                period: "all".into(),
+                action_type: "all".into(),
+                limit,
+                offset,
+            },
+            "2026-06-13T12:00:00+08:00",
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn accepts_all_supported_activity_types() {
+        let db = setup_db().await;
+        let asset_id = insert_asset(&db, "sound.wav", false).await;
+        for action in ["open_file", "reveal_folder", "copy_path", "preview_media"] {
+            record_recent_asset_action_at(&db, asset_id, action, "2026-06-13T10:00:00Z")
+                .await
+                .unwrap();
+        }
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM recent_asset_actions")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(count, 4);
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_activity_type() {
+        let db = setup_db().await;
+        let asset_id = insert_asset(&db, "sound.wav", false).await;
+        let error = record_recent_asset_action_at(
+            &db, asset_id, "selected_asset", "2026-06-13T10:00:00Z"
+        ).await.unwrap_err();
+        assert!(error.to_string().contains("unsupported recent action type"));
+    }
+
+    #[tokio::test]
+    async fn cleanup_removes_old_rows_and_keeps_latest_thousand() {
+        let db = setup_db().await;
+        let asset_id = insert_asset(&db, "sound.wav", false).await;
+        insert_activity_series(&db, asset_id, 1005, "2026-06-01T00:00:00Z").await;
+        record_recent_asset_action_at(
+            &db, asset_id, "open_file", "2026-04-01T00:00:00Z"
+        ).await.unwrap();
+
+        cleanup_recent_asset_actions_at(&db, "2026-06-13T00:00:00Z")
+            .await.unwrap();
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM recent_asset_actions")
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(count, 1000);
+        let old: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM recent_asset_actions WHERE created_at < '2026-05-14T00:00:00Z'"
+        ).fetch_one(&db).await.unwrap();
+        assert_eq!(old, 0);
+    }
+
+    #[tokio::test]
+    async fn groups_actions_by_asset_with_counts_and_details() {
+        let db = setup_db().await;
+        let sound = insert_asset(&db, "sound.wav", false).await;
+        let video = insert_asset(&db, "hero.mp4", false).await;
+        seed_action(&db, sound, "copy_path", "2026-06-13T09:00:00Z").await;
+        seed_action(&db, sound, "open_file", "2026-06-13T10:00:00Z").await;
+        seed_action(&db, video, "reveal_folder", "2026-06-12T10:00:00Z").await;
+
+        let page = list_recent_activity_at(
+            &db,
+            crate::models::RecentActivityRequest {
+                period: "all".into(),
+                action_type: "all".into(),
+                limit: 20,
+                offset: 0,
+            },
+            "2026-06-13T12:00:00+08:00",
+        ).await.unwrap();
+
+        assert_eq!(page.total_count, 2);
+        assert_eq!(page.items[0].asset.id, sound);
+        assert_eq!(page.items[0].latest_action_type, "open_file");
+        assert_eq!(page.items[0].action_count, 2);
+        assert_eq!(page.items[0].copy_path_count, 1);
+        assert_eq!(page.items[0].actions.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn filters_today_week_and_action_type() {
+        let db = setup_db().await;
+        let asset = insert_asset(&db, "sound.wav", false).await;
+        seed_action(&db, asset, "copy_path", "2026-06-13T01:00:00Z").await;
+        seed_action(&db, asset, "open_file", "2026-06-07T01:00:00Z").await;
+
+        let today = request_page(&db, "today", "copy_path", "2026-06-13T12:00:00Z"
+        ).await;
+        assert_eq!(today.items.len(), 1);
+        assert_eq!(today.items[0].action_count, 1);
+
+        let week = request_page(&db, "week", "all", "2026-06-13T12:00:00Z"
+        ).await;
+        assert_eq!(week.items[0].action_count, 2);
+    }
+
+    #[tokio::test]
+    async fn keeps_missing_assets_and_uses_stable_pagination() {
+        let db = setup_db().await;
+        let a = insert_asset(&db, "a.wav", true).await;
+        let b = insert_asset(&db, "b.wav", false).await;
+        seed_action(&db, a, "open_file", "2026-06-13T10:00:00Z").await;
+        seed_action(&db, b, "copy_path", "2026-06-13T10:00:00Z").await;
+        let page = request_page_with_limit(&db, 1, 0).await;
+        assert_eq!(page.total_count, 2);
+        assert_eq!(page.items.len(), 1);
+        assert!(page.items[0].asset.id == a || page.items[0].asset.id == b);
+    }
+
+    #[tokio::test]
+    async fn stable_sort_by_id_for_same_timestamp() {
+        let db = setup_db().await;
+        let first = insert_asset(&db, "first.wav", false).await;
+        let second = insert_asset(&db, "second.wav", false).await;
+        seed_action(&db, first, "open_file", "2026-06-13T10:00:00Z").await;
+        seed_action(&db, second, "copy_path", "2026-06-13T10:00:00Z").await;
+
+        let page = request_page_with_limit(&db, 10, 0).await;
+
+        assert_eq!(page.items.len(), 2);
+        assert_eq!(page.items[0].asset.id, second);
+        assert_eq!(page.items[1].asset.id, first);
+    }
+
+    #[tokio::test]
+    async fn details_limited_to_fifty_but_counts_full() {
+        let db = setup_db().await;
+        let asset = insert_asset(&db, "sound.wav", false).await;
+        for i in 0..60 {
+            let ts = format!("2026-06-13T{:02}:00:00Z", i % 24);
+            seed_action(&db, asset, "copy_path", &ts).await;
+        }
+
+        let page = request_page_with_limit(&db, 10, 0).await;
+
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.items[0].action_count, 60);
+        assert_eq!(page.items[0].copy_path_count, 60);
+        assert_eq!(page.items[0].actions.len(), 50);
+    }
+
+    #[tokio::test]
+    async fn latest_action_type_respects_action_filter() {
+        let db = setup_db().await;
+        let asset = insert_asset(&db, "sound.wav", false).await;
+        seed_action(&db, asset, "copy_path", "2026-06-13T10:00:00Z").await;
+        seed_action(&db, asset, "open_file", "2026-06-13T10:00:00Z").await;
+
+        let page = request_page(
+            &db, "all", "copy_path", "2026-06-13T12:00:00Z"
+        ).await;
+
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].latest_action_type, "copy_path");
+        assert_eq!(page.items[0].action_count, 1);
+    }
+
+    #[tokio::test]
+    async fn second_page_is_stable_and_bounded() {
+        let db = setup_db().await;
+        let a = insert_asset(&db, "a.wav", false).await;
+        let b = insert_asset(&db, "b.wav", false).await;
+        seed_action(&db, a, "open_file", "2026-06-13T10:00:00Z").await;
+        seed_action(&db, b, "copy_path", "2026-06-12T10:00:00Z").await;
+
+        let first = request_page_with_limit(&db, 1, 0).await;
+        let second = request_page_with_limit(&db, 1, 1).await;
+
+        assert_eq!(first.items.len(), 1);
+        assert_eq!(second.items.len(), 1);
+        assert_ne!(first.items[0].asset.id, second.items[0].asset.id);
+        assert_eq!(first.items[0].asset.id, a);
+        assert_eq!(second.items[0].asset.id, b);
+    }
+
+    #[tokio::test]
+    async fn migration_0009_enforces_action_type_check() {
+        let options = SqliteConnectOptions::new()
+            .filename(":memory:")
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query(
+            "INSERT INTO library_folders (name, path, created_at, is_enabled) \
+             VALUES ('fixture', 'C:/assets', '2024-01-01T00:00:00Z', 1)"
+        ).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO assets (library_folder_id, absolute_path, file_name, extension, \
+             asset_type, file_size, modified_at, created_at, updated_at) \
+             VALUES (1, 'C:/assets/sound.wav', 'sound.wav', 'wav', 'audio', 0, \
+             '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')"
+        ).execute(&pool).await.unwrap();
+
+        let invalid = sqlx::query(
+            "INSERT INTO recent_asset_actions (asset_id, action_type, created_at) \
+             VALUES (1, 'invalid_action', '2026-06-13T10:00:00Z')"
+        ).execute(&pool).await;
+        assert!(invalid.is_err());
+
+        let valid = sqlx::query(
+            "INSERT INTO recent_asset_actions (asset_id, action_type, created_at) \
+             VALUES (1, 'preview_media', '2026-06-13T10:00:00Z')"
+        ).execute(&pool).await;
+        assert!(valid.is_ok());
     }
 }
 

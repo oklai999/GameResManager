@@ -110,8 +110,42 @@ export type AssetSearchResponse = {
 export type RecentAssetAction = {
   id: number;
   asset_id: number;
-  action_type: "open_file" | "reveal_folder" | "copy_path";
+  action_type: "open_file" | "reveal_folder" | "copy_path" | "preview_media";
   created_at: string;
+};
+
+export type RecentActionType =
+  | "open_file"
+  | "reveal_folder"
+  | "copy_path"
+  | "preview_media";
+
+export type RecentActivityPeriod = "all" | "today" | "week";
+
+export type RecentActivityRequest = {
+  period: RecentActivityPeriod;
+  action_type: "all" | RecentActionType;
+  limit: number;
+  offset: number;
+};
+
+export type RecentActivityItem = {
+  asset: Asset;
+  latest_action_type: RecentActionType;
+  latest_action_at: string;
+  action_count: number;
+  open_file_count: number;
+  reveal_folder_count: number;
+  copy_path_count: number;
+  preview_media_count: number;
+  actions: RecentAssetAction[];
+};
+
+export type RecentActivityResponse = {
+  items: RecentActivityItem[];
+  total_count: number;
+  limit: number;
+  offset: number;
 };
 
 export type AssetPathVariants = {
