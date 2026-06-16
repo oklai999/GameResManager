@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { Copy, ExternalLink, FolderOpen, Star } from "lucide-react";
 import type { Asset, AssetPathVariants, Collection } from "../types/asset";
 import { assetPathVariants, getAssetTags, listCommonTags, updateAssetNote } from "../api/tauri";
+import { MediaPreview } from "./MediaPreview";
 import { EmptyState } from "./EmptyState";
 import { TagEditor } from "./TagEditor";
 
@@ -24,7 +25,18 @@ type Props = {
   onProjectRootChange?: (root: string) => void;
   activeCollectionId: number | null;
   onRemoveFromCollection: (collectionId: number, assetIds: number[]) => void;
+  onMediaPlaybackStarted: (asset: Asset) => void;
 };
+
+const SUPPORTED_AUDIO = new Set(["mp3", "wav", "ogg"]);
+const SUPPORTED_VIDEO = new Set(["mp4", "webm"]);
+
+function isSupportedMedia(asset: Asset): boolean {
+  const ext = asset.extension.toLowerCase();
+  if (asset.asset_type === "audio") return SUPPORTED_AUDIO.has(ext);
+  if (asset.asset_type === "video") return SUPPORTED_VIDEO.has(ext);
+  return false;
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -64,6 +76,7 @@ export function DetailsPanel({
   onProjectRootChange,
   activeCollectionId,
   onRemoveFromCollection,
+  onMediaPlaybackStarted,
 }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
@@ -205,7 +218,9 @@ export function DetailsPanel({
       </div>
       <div className="inspector-scroll">
         <div className="detail-preview">
-          {canPreview ? (
+          {!asset.is_missing && isSupportedMedia(asset) ? (
+            <MediaPreview asset={asset} onPlaybackStarted={onMediaPlaybackStarted} />
+          ) : canPreview ? (
             <img src={convertFileSrc(asset.thumbnail_path!)} alt="" />
           ) : (
             <span>{asset.is_missing ? "文件缺失" : asset.asset_type}</span>

@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent, { UserEvent } from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DetailsPanel } from "./DetailsPanel";
 import type { Asset, Collection } from "../types/asset";
 import { getAssetTags, listCommonTags } from "../api/tauri";
@@ -53,6 +53,15 @@ function makeCollection(id: number, name: string): Collection {
   return { id, name, description: "", asset_count: 0 };
 }
 
+beforeAll(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+});
+
+afterAll(() => {
+  vi.restoreAllMocks();
+});
+
 describe("DetailsPanel", () => {
   it("shows batch mode for multiple selected assets", async () => {
     render(
@@ -69,6 +78,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -90,6 +100,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -115,6 +126,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -140,6 +152,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -163,6 +176,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -193,6 +207,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -221,6 +236,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -247,6 +263,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -270,6 +287,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -296,6 +314,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -319,6 +338,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -351,6 +371,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -383,6 +404,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -418,6 +440,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -453,6 +476,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -477,6 +501,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -513,6 +538,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -534,6 +560,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -558,6 +585,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={onRemoveFromCollection}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -583,6 +611,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={onRemoveFromCollection}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -607,6 +636,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
 
@@ -631,6 +661,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={onRemoveTag}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     await screen.findByRole("button", { name: "移除标签 角色" });
@@ -655,6 +686,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={onRemoveTag}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     await screen.findByRole("button", { name: "移除标签 角色" });
@@ -678,6 +710,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     expect(await screen.findByText("旧标签")).toBeInTheDocument();
@@ -695,6 +728,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={1}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     expect(await screen.findByText("新标签")).toBeInTheDocument();
@@ -716,6 +750,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     expect(await screen.findByRole("button", { name: "移除标签 角色" })).toBeInTheDocument();
@@ -733,6 +768,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     expect(await screen.findByRole("button", { name: "移除标签 特效" })).toBeInTheDocument();
@@ -754,6 +790,7 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     expect(await screen.findByRole("button", { name: "打开文件" })).toBeInTheDocument();
@@ -776,16 +813,19 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
     await screen.findByText("1.png");
     expect(container.querySelector(".inspector-scroll")).not.toBeNull();
   });
 
-  it("does not show file actions in batch mode", async () => {
+  it("shows missing placeholder for missing supported media", async () => {
     render(
       <DetailsPanel
-        selectedAssets={[makeAsset(1), makeAsset(2)]}
+        selectedAssets={[
+          { ...makeAsset(1), asset_type: "audio" as const, extension: "mp3" as const, file_name: "1.mp3", is_missing: true },
+        ]}
         collections={[]}
         onOpenFile={vi.fn()}
         onReveal={vi.fn()}
@@ -797,9 +837,117 @@ describe("DetailsPanel", () => {
         onRemoveFromCollection={vi.fn()}
         onRemoveTag={vi.fn()}
         tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
       />
     );
-    expect(await screen.findByText("已选择 2 个资源")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "打开文件" })).not.toBeInTheDocument();
+
+    expect(await screen.findByText("文件缺失")).toBeInTheDocument();
+    expect(screen.queryByTestId("media-preview")).not.toBeInTheDocument();
+  });
+
+  it("uses MediaPreview for supported audio", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[
+          { ...makeAsset(1), asset_type: "audio" as const, extension: "mp3" as const, file_name: "1.mp3" },
+        ]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
+      />
+    );
+
+    const media = await screen.findByTestId("media-preview");
+    expect(media.tagName.toLowerCase()).toBe("audio");
+  });
+
+  it("uses MediaPreview for supported video", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[
+          { ...makeAsset(1), asset_type: "video" as const, extension: "mp4" as const, file_name: "1.mp4" },
+        ]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
+      />
+    );
+
+    const media = await screen.findByTestId("media-preview");
+    expect(media.tagName.toLowerCase()).toBe("video");
+  });
+
+  it("keeps file actions after preview failure", async () => {
+    render(
+      <DetailsPanel
+        selectedAssets={[
+          { ...makeAsset(1), asset_type: "video" as const, extension: "mp4" as const, file_name: "1.mp4" },
+        ]}
+        collections={[makeCollection(1, "SFX")]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+        onMediaPlaybackStarted={vi.fn()}
+      />
+    );
+
+    fireEvent.error(await screen.findByTestId("media-preview"));
+    expect(screen.getByRole("button", { name: "打开文件" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开所在目录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制路径" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("输入备注...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存备注" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("输入标签...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "SFX" })).toBeInTheDocument();
+  });
+
+  it("propagates onMediaPlaybackStarted from MediaPreview", async () => {
+    const onMediaPlaybackStarted = vi.fn();
+    const asset = { ...makeAsset(1), asset_type: "audio" as const, extension: "mp3" as const, file_name: "1.mp3" };
+    render(
+      <DetailsPanel
+        selectedAssets={[asset]}
+        collections={[]}
+        onOpenFile={vi.fn()}
+        onReveal={vi.fn()}
+        onCopyPath={vi.fn()}
+        onApplyTag={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onAddToCollection={vi.fn()}
+        activeCollectionId={null}
+        onRemoveFromCollection={vi.fn()}
+        onRemoveTag={vi.fn()}
+        tagRefreshVersion={0}
+        onMediaPlaybackStarted={onMediaPlaybackStarted}
+      />
+    );
+
+    fireEvent.play(await screen.findByTestId("media-preview"));
+    expect(onMediaPlaybackStarted).toHaveBeenCalledWith(asset);
   });
 });

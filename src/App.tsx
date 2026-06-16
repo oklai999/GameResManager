@@ -77,6 +77,19 @@ async function fetchLatestJobs(folderList: LibraryFolder[]) {
   return jobs;
 }
 
+export async function recordMediaPreviewActivity(
+  asset: Asset,
+  getActiveSection: () => WorkbenchSection,
+  loadRecentActivity: () => Promise<void>
+): Promise<void> {
+  try {
+    await recordRecentAssetAction(asset.id, "preview_media");
+    if (getActiveSection() === "recent") await loadRecentActivity();
+  } catch (error) {
+    console.error("Failed to record media preview", error);
+  }
+}
+
 function AppInner() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
@@ -113,6 +126,10 @@ function AppInner() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagRefreshVersion, setTagRefreshVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<WorkbenchSection>("library");
+  const activeSectionRef = useRef(activeSection);
+  useEffect(() => {
+    activeSectionRef.current = activeSection;
+  }, [activeSection]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [gridDensity, setGridDensity] = useState<"compact" | "comfortable">("compact");
@@ -228,6 +245,11 @@ function AppInner() {
       }
     }
   }, [activeSection, recentActionType, recentPeriod, showError]);
+
+  const loadRecentActivityRef = useRef(loadRecentActivity);
+  useEffect(() => {
+    loadRecentActivityRef.current = loadRecentActivity;
+  }, [loadRecentActivity]);
 
   const refreshRecentIfVisible = useCallback(() => {
     if (activeSection === "recent") {
@@ -743,6 +765,14 @@ function AppInner() {
     }
   }, [showToast]);
 
+  const handleMediaPlaybackStarted = useCallback((asset: Asset) => {
+    void recordMediaPreviewActivity(
+      asset,
+      () => activeSectionRef.current,
+      () => loadRecentActivityRef.current()
+    );
+  }, []);
+
   const isEmptySearch = displayAssets.length === 0;
   const hasFolders = folders.length > 0;
   const hasScanned = hasFolders && assets.length > 0;
@@ -911,6 +941,7 @@ function AppInner() {
         onCopyText={handleCopyText}
         projectRoot={projectRoot}
         onProjectRootChange={setProjectRoot}
+        onMediaPlaybackStarted={handleMediaPlaybackStarted}
       />
     </main>
   );

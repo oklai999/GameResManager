@@ -10,9 +10,9 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 
 ## Status
 
-- Current version: `0.10.0`
+- Current version: `0.10.1`
 - Platform focus: Windows desktop
-- Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag management, collection management, path variants, and advanced filters
+- Product stage: local-first MVP with scan stability, thumbnail display, folder management, recent activity, tag management, collection management, path variants, advanced filters, and native media preview for supported audio/video formats
 - License: MIT
 
 ## Features
@@ -33,6 +33,7 @@ The app only manages indexes, thumbnails, tags, collections, notes, and recent a
 - Create, rename, describe, count, delete, and filter collections; add or remove single and multiple assets without changing source files.
 - Edit per-asset notes.
 - Track recent open/reveal/copy-path actions in a dedicated timeline, grouped by resource with expandable action details, time-range and action-type filters, and paginated load-more.
+- Preview supported audio (`mp3`, `wav`, `ogg`) and video (`mp4`, `webm`) files with native controls in the right inspector; codec or load failures fall back to a clear placeholder while keeping file actions.
 - Open files, reveal containing folders, and copy absolute paths.
 - Optionally derive Godot-style `res://` paths when an explicit project root is provided.
 - Show scan progress, support cancellation, and preserve already-indexed assets when a scan is cancelled.
@@ -132,11 +133,11 @@ cargo check
 
 Current local verification baseline:
 
-- `npm test`: 138 frontend tests passing.
-- `npm run build`: succeeds with versioned `v0_10_0` CSS and JavaScript assets.
-- `cargo test`: 147 Rust unit tests plus the build script integration test passing.
+- `npm test`: 167 frontend tests passing.
+- `npm run build`: succeeds with versioned `v0_10_1` CSS and JavaScript assets.
+- `cargo test`: 172 Rust unit and integration tests plus the build script integration test passing.
 - `cargo check`: succeeds with the local MSVC and Windows SDK environment and one expected `dead_code` warning for the internal `list_recent_asset_actions` repository helper.
-- `npm run tauri build`: produces the `0.10.0` x64 NSIS installer when run separately.
+- `npm run tauri build`: produces the `0.10.1` x64 NSIS installer when run separately.
 
 Manual smoke checks live in [tests/smoke/README.md](tests/smoke/README.md).
 The v0.10.0 release verification record lives in [docs/releases/v0.10.0.md](docs/releases/v0.10.0.md).
@@ -216,7 +217,8 @@ This project manages user-owned local asset folders. Keep these rules intact:
 - Search results are loaded in pages and the grid is virtualized; extremely large libraries may still need additional profiling and query tuning.
 - CJK substring search uses SQLite trigram indexing for terms with at least three Unicode characters. One- and two-character terms use a scope-limited literal fallback and may be slower on extremely large libraries.
 - Thumbnail generation is decoupled from indexing failures, but image-heavy folders can still make scans take time.
-- PSD, Spine, 3D, audio, and video files are indexed and shown with useful placeholders, but the app does not provide full runtime previews for those formats.
+- Native in-app preview is available for audio (`mp3`, `wav`, `ogg`) and video (`mp4`, `webm`) using the system WebView2 media pipeline. Other audio/video formats, 3D, Spine, and PSD files are indexed and shown with useful placeholders.
+- Codec or network-level load failures for supported formats show a fallback message and preserve safe file actions (open file, reveal folder, copy path).
 - Godot `res://` path derivation is optional and only works when an explicit project root is provided.
 - The app does not include cloud sync, team accounts, AI auto-tagging, atlas processing, SVN integration, delete, batch move, or batch rename.
 

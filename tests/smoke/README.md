@@ -341,4 +341,75 @@ Verification run on 2026-06-13:
 - [ ] Source asset files remain untouched during all recent-activity interactions.
 - [ ] Automated metadata, frontend, Rust, and production build checks pass.
 
-Automated GUI interaction was unavailable in this headless environment: `npm run tauri dev` compiled successfully and launched `game-resource-manager.exe`, but the process produced no window or further logs because no display server was present. The interactive checklist items above remain the final manual acceptance checklist for a workstation with a display.
+## v0.10.1 Native Media Preview Smoke Test
+
+Use a fixture folder outside the repository containing the following files:
+
+- `sample.mp3` — MPEG-1/2 Audio Layer III, common codec
+- `sample.wav` — RIFF/WAVE, PCM or common lossless codec
+- `sample.ogg` — Ogg Vorbis
+- `sample.mp4` — H.264/AAC (most WebView2-compatible)
+- `sample.webm` — VP8/VP9 + Vorbis/Opus
+- `incompatible.mp4` — MP4 container with a codec WebView2 cannot decode (e.g. HEVC without hardware support)
+- `incompatible.webm` — WebM container with an unsupported codec
+
+Preparation:
+
+1. Note each source file's absolute path, size, and modified time.
+2. Add the fixture folder as a resource library and run scan.
+3. Switch to `最近使用` so the timeline is visible.
+
+Matrix (mark after testing each file):
+
+| File | Metadata loads | Play starts | Seek works | Volume works | Switch stops playback | First play records `preview_media` | Continuous play does not duplicate | Pause / play records another `preview_media` | Select-only does not record | Codec failure shows fallback | File actions remain | Source file unchanged |
+|------|----------------|-------------|------------|--------------|-----------------------|------------------------------------|------------------------------------|----------------------------------------------|-----------------------------|------------------------------|---------------------|-----------------------|
+| `sample.mp3` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
+| `sample.wav` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
+| `sample.ogg` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
+| `sample.mp4` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
+| `sample.webm` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
+| `incompatible.mp4` | [ ] | N/A | N/A | N/A | N/A | N/A | N/A | N/A | [ ] | [ ] | [ ] | [ ] |
+| `incompatible.webm` | [ ] | N/A | N/A | N/A | N/A | N/A | N/A | N/A | [ ] | [ ] | [ ] | [ ] |
+
+Procedure for each supported file:
+
+1. Select the asset (do not click play).
+2. Confirm the right inspector shows the native media element (`audio` or `video` controls) and does not autoplay.
+3. Confirm the timeline did **not** record a `preview_media` action from selection alone.
+4. Click play.
+5. Confirm metadata (duration) loads and playback begins.
+6. Confirm the timeline records exactly one `preview_media` action for this asset.
+7. Adjust volume and confirm the control responds.
+8. Seek to the middle and confirm playback resumes from the new position.
+9. Let playback continue for a few seconds and confirm no second `preview_media` action is recorded.
+10. Pause, then click play again.
+11. Confirm a second `preview_media` action is recorded after the pause/play.
+12. Select a different asset.
+13. Confirm the previous media element is removed and playback stops (no background audio).
+14. Confirm file actions (`打开文件`, `打开所在目录`, `复制路径`) remain available.
+15. Rescan the folder and confirm the source file's modified time, size, and path are unchanged.
+
+Procedure for incompatible files:
+
+1. Select the asset.
+2. Confirm the inspector does not show a usable native player.
+3. Confirm a clear fallback message appears, e.g. "当前文件或编码无法在应用内预览。"
+4. Confirm `打开文件`, `打开所在目录`, `复制路径`, 备注, 标签, and collection actions remain available.
+5. Confirm selecting the file does not record `preview_media`.
+6. Confirm the source file is unchanged.
+
+Safety:
+
+- The app must not delete, move, rename, modify, or write to any fixture file during this smoke test.
+- Do not add ffmpeg, transcode files, or expand Tauri permissions to work around codec failures.
+
+### v0.10.1 Release Verification Record
+
+Verification run on 2026-06-16:
+
+- [x] Automated metadata, frontend, Rust, and production build checks pass.
+- [x] Development desktop application starts successfully through `npm run tauri dev`.
+- [ ] Native preview smoke matrix above filled on a workstation with available fixture files and a display.
+- [ ] Source asset files remain untouched during all preview interactions.
+
+Automated GUI interaction for the matrix was unavailable in this headless environment; the interactive checklist remains the final manual acceptance checklist for a workstation with a display and test fixtures.

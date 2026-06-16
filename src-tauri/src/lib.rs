@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod file_actions;
 mod indexer;
+pub mod media;
 mod models;
 mod scan_service;
 mod search;
@@ -11,12 +12,40 @@ mod thumbnails;
 use std::path::PathBuf;
 use tauri::Manager;
 
+use sqlx::SqlitePool;
+
 #[derive(Clone)]
 pub struct ThumbnailDir(pub PathBuf);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol(
+            "asset-media",
+            |context, request, responder| {
+                let pool = match context.app_handle().try_state::<SqlitePool>() {
+                    Some(pool) => pool.inner().clone(),
+                    None => {
+                        responder.respond(
+                            tauri::http::Response::builder()
+                                .status(503)
+                                .header(
+                                    tauri::http::header::CONTENT_TYPE,
+                                    "text/plain; charset=utf-8",
+                                )
+                                .header(tauri::http::header::CONTENT_LENGTH, 21)
+                                .body("Service Unavailable".as_bytes().to_vec())
+                                .unwrap(),
+                        );
+                        return;
+                    }
+                };
+                tauri::async_runtime::spawn(async move {
+                    let response = media::handle_protocol_request(&pool, request).await;
+                    responder.respond(response);
+                });
+            },
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {

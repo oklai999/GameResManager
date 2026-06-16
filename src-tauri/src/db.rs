@@ -99,6 +99,19 @@ pub async fn list_assets(db: &Db, limit: i64, offset: i64) -> anyhow::Result<Vec
     Ok(rows)
 }
 
+pub async fn get_asset_by_id(db: &Db, asset_id: i64) -> anyhow::Result<Option<Asset>> {
+    sqlx::query_as::<_, Asset>(
+        "SELECT id, library_folder_id, absolute_path, file_name, extension, asset_type,
+                file_size, modified_at, width, height, thumbnail_path, thumbnail_status,
+                thumbnail_error, note, is_favorite, is_missing, created_at, updated_at
+         FROM assets WHERE id = ?1"
+    )
+    .bind(asset_id)
+    .fetch_optional(db)
+    .await
+    .map_err(Into::into)
+}
+
 use crate::models::{ScanJob, ScanJobStatus, ScanSettings};
 use crate::tags::normalize_tag_name;
 
