@@ -140,7 +140,8 @@ Current local verification baseline:
 - `npm run tauri build`: produces the `0.10.1` x64 NSIS installer when run separately.
 
 Manual smoke checks live in [tests/smoke/README.md](tests/smoke/README.md).
-The v0.10.0 release verification record lives in [docs/releases/v0.10.0.md](docs/releases/v0.10.0.md).
+The v0.10.1 release verification record lives in [docs/releases/v0.10.1.md](docs/releases/v0.10.1.md).
+Earlier release notes are kept in [docs/releases/](docs/releases/).
 
 ## Project Structure
 

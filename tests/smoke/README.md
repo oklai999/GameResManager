@@ -363,13 +363,13 @@ Matrix (mark after testing each file):
 
 | File | Metadata loads | Play starts | Seek works | Volume works | Switch stops playback | First play records `preview_media` | Continuous play does not duplicate | Pause / play records another `preview_media` | Select-only does not record | Codec failure shows fallback | File actions remain | Source file unchanged |
 |------|----------------|-------------|------------|--------------|-----------------------|------------------------------------|------------------------------------|----------------------------------------------|-----------------------------|------------------------------|---------------------|-----------------------|
-| `sample.mp3` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
-| `sample.wav` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
-| `sample.ogg` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
-| `sample.mp4` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
-| `sample.webm` | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | N/A | [ ] | [ ] |
-| `incompatible.mp4` | [ ] | N/A | N/A | N/A | N/A | N/A | N/A | N/A | [ ] | [ ] | [ ] | [ ] |
-| `incompatible.webm` | [ ] | N/A | N/A | N/A | N/A | N/A | N/A | N/A | [ ] | [ ] | [ ] | [ ] |
+| `sample.mp3` | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | N/A | 未测 | 未测 |
+| `sample.wav` | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | N/A | 未测 | 未测 |
+| `sample.ogg` | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | N/A | 未测 | 未测 |
+| `sample.mp4` | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | N/A | 未测 | 未测 |
+| `sample.webm` | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | 未测 | N/A | 未测 | 未测 |
+| `incompatible.mp4` | 未测 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | 未测 | 未测 | 未测 | 未测 |
+| `incompatible.webm` | 未测 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | 未测 | 未测 | 未测 | 未测 |
 
 Procedure for each supported file:
 
@@ -405,11 +405,11 @@ Safety:
 
 ### v0.10.1 Release Verification Record
 
-Verification run on 2026-06-16:
+Verification run on 2026-06-17:
 
 - [x] Automated metadata, frontend, Rust, and production build checks pass.
-- [x] Development desktop application starts successfully through `npm run tauri dev`.
-- [ ] Native preview smoke matrix above filled on a workstation with available fixture files and a display.
-- [ ] Source asset files remain untouched during all preview interactions.
+- [~] `npm run tauri dev` compiled and the dev process started; actual window rendering and interaction could not be verified in this non-interactive agent session.
+- [ ] Native preview smoke matrix above remains unfilled: the expected fixture folder `G:\资源\GameResManagerSmoke\v0.10.1-media` was not found, and interactive GUI verification (play, seek, volume, timeline) is not available in this environment.
+- [ ] Source asset files remain untouched during all preview interactions (no fixture files were accessed).
 
-Automated GUI interaction for the matrix was unavailable in this headless environment; the interactive checklist remains the final manual acceptance checklist for a workstation with a display and test fixtures.
+This interactive matrix must be run on a workstation with a display, the required fixture files, and a human or automated desktop control tool. All matrix cells have been marked `未测` to avoid fabricating a pass.
