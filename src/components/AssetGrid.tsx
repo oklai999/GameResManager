@@ -24,20 +24,24 @@ type Props = {
   onToggleFavorite: (asset: Asset) => void;
   resetKey?: string | number;
   density: GridDensity;
+  onQuickLook?: (asset: Asset) => void;
+  initialScrollTop?: number;
+  onScrollPosition?: (top: number) => void;
 };
 
-export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite, resetKey, density }: Props) {
+export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavorite, resetKey, density, onQuickLook, initialScrollTop = 0, onScrollPosition }: Props) {
   const [failedMap, setFailedMap] = useState<Map<number, { thumbnail_path: string | null; thumbnail_status: string }>>(new Map());
 
   const viewportRef = useRef<HTMLElement | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
-  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollTop, setScrollTop] = useState(initialScrollTop);
 
   const { cardWidth, cardHeight, gap } = densityMetrics(density);
 
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
+    el.scrollTop = initialScrollTop;
 
     function updateFromClient(element: HTMLElement) {
       setViewport({
@@ -155,7 +159,7 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
     <section
       ref={viewportRef}
       className="asset-grid-viewport"
-      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      onScroll={(event) => { setScrollTop(event.currentTarget.scrollTop); onScrollPosition?.(event.currentTarget.scrollTop); }}
     >
       <div
         className="asset-grid-spacer"
@@ -181,6 +185,7 @@ export function AssetGrid({ assets, selectedIds, onSelectionChange, onToggleFavo
               onSelectOnly={selectOnly}
               onToggleMulti={toggleMulti}
               onToggleFavorite={onToggleFavorite}
+              onQuickLook={onQuickLook}
               style={{
                 position: "absolute",
                 width: cardWidth,

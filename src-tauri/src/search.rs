@@ -155,6 +155,37 @@ fn build_search_where(req: &AssetSearchRequest) -> SearchWhere {
         plan.binds.push(SearchBind::Text(value.clone()));
     }
     push_integer!(req.library_folder_id, "library_folder_id = ?");
+    if let Some(path) = &req.discovery.directory_path {
+        let path = path.replace('\\', "/").trim_end_matches('/').to_string();
+        if req.discovery.recursive {
+            plan.conditions.push("(parent_path = ? COLLATE NOCASE OR parent_path LIKE ? ESCAPE '\\')".into());
+            plan.binds.push(SearchBind::Text(path.clone()));
+            plan.binds.push(SearchBind::Text(format!("{}/%", escape_like_pattern(&path))));
+        } else {
+            plan.conditions.push("parent_path = ? COLLATE NOCASE".into());
+            plan.binds.push(SearchBind::Text(path));
+        }
+    }
+    // Selected values OR within one dimension and AND across dimensions.
+    for dimension in ["usage", "subject", "action", "style", "general"] {
+        if !req.discovery.tag_ids.is_empty() {
+            let placeholders = vec!["?"; req.discovery.tag_ids.len()].join(",");
+            let selected = format!("SELECT t.id FROM tags t LEFT JOIN tag_dimensions d ON d.tag_id=t.id WHERE COALESCE(d.dimension,'general') = ? AND t.id IN ({placeholders})");
+            plan.conditions.push(format!("(NOT EXISTS ({selected}) OR EXISTS (SELECT 1 FROM asset_tags a WHERE a.asset_id=assets.id AND a.tag_id IN ({selected})))"));
+            for _ in 0..2 {
+                plan.binds.push(SearchBind::Text(dimension.into()));
+                plan.binds.extend(req.discovery.tag_ids.iter().map(|id| SearchBind::Integer(*id)));
+            }
+        }
+    }
+    for id in &req.discovery.excluded_tag_ids {
+        plan.conditions.push("NOT EXISTS (SELECT 1 FROM asset_tags a WHERE a.asset_id=assets.id AND a.tag_id=?)".into());
+        plan.binds.push(SearchBind::Integer(*id));
+    }
+    if req.discovery.unclassified {
+        plan.conditions.push("NOT EXISTS (SELECT 1 FROM asset_tags a JOIN tag_dimensions d ON d.tag_id=a.tag_id WHERE a.asset_id=assets.id AND d.dimension != 'general')".into());
+    }
+
     push_integer!(req.collection_id, "id IN (
         SELECT asset_id FROM collection_assets WHERE collection_id = ?
     )");
@@ -233,7 +264,7 @@ pub async fn search_assets(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow:
         "ASC"
     };
     sql.push_str(&format!(
-        " ORDER BY {} {}, file_name ASC LIMIT ? OFFSET ?",
+        " ORDER BY {} {}, file_name ASC, id ASC LIMIT ? OFFSET ?",
         sort_column, sort_direction
     ));
 
@@ -279,6 +310,7 @@ mod tests {
 
     fn empty_request() -> AssetSearchRequest {
         AssetSearchRequest {
+            discovery: Default::default(),
             query: String::new(),
             search_file_name: true,
             search_note: false,
@@ -346,7 +378,7 @@ mod tests {
         );
         let plan = build_search_where(req);
         sql.push_str(&plan.sql());
-        sql.push_str(" ORDER BY file_name ASC, file_name ASC LIMIT ? OFFSET ?");
+        sql.push_str(" ORDER BY file_name ASC, file_name ASC, id ASC LIMIT ? OFFSET ?");
         (sql, plan)
     }
 
@@ -503,6 +535,7 @@ mod tests {
         ).execute(&pool).await.unwrap();
 
         let req = AssetSearchRequest {
+            discovery: Default::default(),
             query: "hero".to_string(),
             search_file_name: true,
             search_note: true,
@@ -531,6 +564,7 @@ mod tests {
         assert_eq!(results[0].file_name, "hero.png");
 
         let mut req = AssetSearchRequest {
+            discovery: Default::default(),
             query: "important".to_string(),
             search_file_name: false,
             search_note: false,
@@ -575,6 +609,7 @@ mod tests {
         assert_eq!(results[0].file_name, "hero.png");
 
         let req = AssetSearchRequest {
+            discovery: Default::default(),
             query: "".to_string(),
             search_file_name: true,
             search_note: false,
@@ -603,6 +638,7 @@ mod tests {
         assert_eq!(results[0].file_name, "sound.wav");
 
         let req = AssetSearchRequest {
+            discovery: Default::default(),
             query: "".to_string(),
             search_file_name: true,
             search_note: false,
@@ -632,6 +668,7 @@ mod tests {
         assert!(results.iter().any(|a| a.file_name == "sound.wav"));
 
         let req = AssetSearchRequest {
+            discovery: Default::default(),
             query: "".to_string(),
             search_file_name: true,
             search_note: false,
@@ -660,6 +697,7 @@ mod tests {
         assert_eq!(results[0].file_name, "hero.png");
 
         let req = AssetSearchRequest {
+            discovery: Default::default(),
             query: "".to_string(),
             search_file_name: true,
             search_note: false,
@@ -1299,4 +1337,13 @@ mod tests {
         assert_eq!(page.total_count, 1);
         assert_eq!(page.assets[0].file_name, "hero.png");
     }
+}
+
+
+pub async fn facet_tags(db: &SqlitePool, req: &AssetSearchRequest) -> anyhow::Result<Vec<crate::models::FacetTag>> {
+    let plan = build_search_where(req);
+    let sql = format!("SELECT t.id,t.name,t.color,COALESCE(d.dimension,'general') AS dimension,COUNT(m.id) AS asset_count FROM tags t LEFT JOIN tag_dimensions d ON d.tag_id=t.id LEFT JOIN asset_tags a ON a.tag_id=t.id LEFT JOIN (SELECT id FROM assets {}) m ON m.id=a.asset_id GROUP BY t.id ORDER BY t.name,t.id", plan.sql());
+    let mut query = sqlx::query_as::<_, crate::models::FacetTag>(&sql);
+    for bind in &plan.binds { query = match bind { SearchBind::Text(v) => query.bind(v), SearchBind::Integer(v) => query.bind(v) }; }
+    Ok(query.fetch_all(db).await?)
 }

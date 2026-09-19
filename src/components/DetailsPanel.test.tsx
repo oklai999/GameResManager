@@ -319,7 +319,7 @@ describe("DetailsPanel", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "复制文件名" }));
-    expect(onCopyText).toHaveBeenCalledWith("1.png");
+    expect(onCopyText).toHaveBeenCalledWith("1.png", expect.objectContaining({ id: 1 }));
   });
 
   it("does not show path variant buttons in batch mode", async () => {
@@ -447,7 +447,7 @@ describe("DetailsPanel", () => {
     const resBtn = await screen.findByRole("button", { name: "复制 res:// 路径" });
     expect(resBtn).toBeInTheDocument();
     await userEvent.click(resBtn);
-    expect(onCopyText).toHaveBeenCalledWith("res://assets/1.png");
+    expect(onCopyText).toHaveBeenCalledWith("res://assets/1.png", expect.objectContaining({ id: 1 }));
   });
 
   it("shows not-in-project message when asset is outside project root", async () => {

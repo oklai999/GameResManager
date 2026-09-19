@@ -12,6 +12,7 @@ type Props = {
   onToggleMulti: (assetId: number, checked: boolean) => void;
   onToggleFavorite: (asset: Asset) => void;
   style?: CSSProperties;
+  onQuickLook?: (asset: Asset) => void;
 };
 
 function placeholderText(asset: Asset, imageLoadFailed: boolean): string {
@@ -71,7 +72,7 @@ function assetTypeIcon(assetType: Asset["asset_type"]) {
   }
 }
 
-export function AssetCard({ asset, selected, imageLoadFailed, onImageError, onSelectOnly, onToggleMulti, onToggleFavorite, style }: Props) {
+export function AssetCard({ asset, selected, imageLoadFailed, onImageError, onSelectOnly, onToggleMulti, onToggleFavorite, style, onQuickLook }: Props) {
   const thumbnailPath = asset.thumbnail_path;
   const canRenderThumbnail =
     !asset.is_missing &&
@@ -84,6 +85,13 @@ export function AssetCard({ asset, selected, imageLoadFailed, onImageError, onSe
     <div
       className={selected ? "asset-card selected" : "asset-card"}
       onClick={() => onSelectOnly(asset.id)}
+      onDoubleClick={() => onQuickLook?.(asset)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter") { event.preventDefault(); onSelectOnly(asset.id); }
+        if (event.key === " ") { event.preventDefault(); onSelectOnly(asset.id); onQuickLook?.(asset); }
+      }}
+      data-asset-id={asset.id}
       title={asset.absolute_path}
       aria-label={asset.file_name}
       role="button"
@@ -118,6 +126,7 @@ export function AssetCard({ asset, selected, imageLoadFailed, onImageError, onSe
         <div className="asset-meta">
           {asset.width && asset.height ? `${asset.width} x ${asset.height}` : asset.asset_type}
         </div>
+        <div className="asset-source">{asset.absolute_path.replace(/\\/g, "/").split("/").slice(-3, -1).reverse().join(" · ")}</div>
         {asset.tags && asset.tags.length > 0 && (
           <div className="asset-tag-row">
             {asset.tags.slice(0, 2).map((tag) => (

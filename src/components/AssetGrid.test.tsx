@@ -542,3 +542,17 @@ describe("AssetGrid", () => {
     expect(card.style.height).toBe("178px");
   });
 });
+
+
+it("restores a saved scroll position when returning to a mounted grid", () => {
+  mockGridMeasurements({ width: 900, height: 600 });
+  const many = Array.from({ length: 500 }, (_, i) => makeAsset({ id: i + 1, file_name: `saved-${i}.png` }));
+  const onScrollPosition = vi.fn();
+  const { container } = render(<AssetGrid assets={many} selectedIds={[]} onSelectionChange={vi.fn()} onToggleFavorite={vi.fn()} density="comfortable" initialScrollTop={2000} onScrollPosition={onScrollPosition} />);
+  const viewport = container.querySelector(".asset-grid-viewport") as HTMLElement;
+  expect(viewport.scrollTop).toBe(2000);
+  expect(screen.queryByText("saved-0.png")).not.toBeInTheDocument();
+  viewport.scrollTop = 2200; fireEvent.scroll(viewport);
+  expect(onScrollPosition).toHaveBeenCalledWith(2200);
+  vi.unstubAllGlobals();
+});

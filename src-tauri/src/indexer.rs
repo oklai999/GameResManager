@@ -14,9 +14,30 @@ pub fn classify_asset(path: &Path) -> AssetType {
         "mp4" | "mov" | "webm" | "avi" | "mkv" => AssetType::Video,
         "ttf" | "otf" | "woff" | "woff2" => AssetType::Font,
         "gltf" | "glb" | "obj" | "fbx" | "usd" | "usdz" => AssetType::Model3d,
-        "skel" | "json" | "atlas" | "spine" => AssetType::Spine,
+        "skel" | "spine" => AssetType::Spine,
+        "json" if is_spine_json(path) => AssetType::Spine,
+        "atlas" if is_spine_atlas(path) => AssetType::Spine,
         _ => AssetType::Other,
     }
+}
+
+fn read_small_file(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).ok()?;
+    let mut bytes = Vec::new();
+    file.take(2 * 1024 * 1024 + 1).read_to_end(&mut bytes).ok()?;
+    (bytes.len() <= 2 * 1024 * 1024).then_some(bytes)
+}
+fn is_spine_json(path: &Path) -> bool {
+    read_small_file(path).and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .is_some_and(|v| v.get("skeleton").and_then(|s| s.get("spine")).is_some_and(|s| s.is_string()) && v.get("bones").is_some_and(|b| b.is_array()))
+}
+fn is_spine_atlas(path: &Path) -> bool {
+    let companion = path.with_extension("skel").is_file() || is_spine_json(&path.with_extension("json"));
+    if !companion { return false; }
+    read_small_file(path).and_then(|b| String::from_utf8(b).ok()).is_some_and(|text|
+        text.lines().any(|l| l.trim_start().starts_with("size:")) &&
+        text.lines().any(|l| l.trim_start().starts_with("filter:")))
 }
 
 pub fn normalize_path(path: &Path) -> anyhow::Result<String> {
@@ -117,6 +138,22 @@ pub fn should_generate_thumbnail(extension: &str, settings: &ScanSettings) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ambiguous_formats_require_spine_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hero.json");
+        std::fs::write(&path, br#"{"name":"ordinary settings"}"#).unwrap();
+        assert_eq!(classify_asset(&path), AssetType::Other);
+        let atlas = dir.path().join("hero.atlas");
+        std::fs::write(&atlas, "hero.png\nsize: 256,256\nfilter: Linear,Linear").unwrap();
+        assert_eq!(classify_asset(&atlas), AssetType::Other);
+        std::fs::write(&path, br#"{"skeleton":{"spine":"4.2"},"bones":[{"name":"root"}]}"#).unwrap();
+        assert_eq!(classify_asset(&path), AssetType::Spine);
+        assert_eq!(classify_asset(&atlas), AssetType::Spine);
+        std::fs::write(&path, "{broken").unwrap();
+        assert_eq!(classify_asset(&path), AssetType::Other);
+    }
 
     #[test]
     fn classifies_common_asset_types() {

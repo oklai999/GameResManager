@@ -26,6 +26,8 @@ type Props = {
   collections: Collection[];
   tags: Tag[];
   activeFilter: string;
+  favoriteOnly?: boolean;
+  missingOnly?: boolean;
   activeSection: WorkbenchSection;
   hidden: boolean;
   selectedFolderId: number | null;
@@ -51,6 +53,8 @@ type Props = {
   latestJobs: Record<number, ScanJob | null>;
   folderCounts: Record<number, FolderAssetCounts>;
   settingsPanel?: React.ReactNode;
+  directoryPanel?: React.ReactNode;
+  categoryPanel?: React.ReactNode;
 };
 
 function formatDateTime(iso: string | null): string {
@@ -64,11 +68,11 @@ function formatDateTime(iso: string | null): string {
 }
 
 export function LibrarySidebar({
-  folders, collections, tags, activeFilter, activeSection, hidden,
+  folders, collections, tags, activeFilter, favoriteOnly = false, missingOnly = false, activeSection, hidden,
   selectedFolderId, selectedCollectionId, recentPeriod, recentActionType,
   onFilterChange, onSelectFolder, onSelectCollection, onPickFolder, onScanFolder,
   onCancelScan, onDeleteFolder, onOpenFolder, onCreateCollection, onUpdateCollection, onDeleteCollection,
-  onUpdateTag, onDeleteTag, onRecentPeriodChange, onRecentActionTypeChange, isScanning, latestJobs, folderCounts, settingsPanel,
+  onUpdateTag, onDeleteTag, onRecentPeriodChange, onRecentActionTypeChange, isScanning, latestJobs, folderCounts, settingsPanel, directoryPanel, categoryPanel,
 }: Props) {
   const [collectionName, setCollectionName] = useState("");
   const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
@@ -92,6 +96,7 @@ export function LibrarySidebar({
     { id: "font", label: "字体", icon: Type },
     { id: "model3d", label: "3D", icon: Box },
     { id: "spine", label: "Spine", icon: Box },
+    { id: "other", label: "未识别", icon: Box },
   ];
 
   const handleCreateCollection = (e: React.FormEvent) => {
@@ -114,7 +119,7 @@ export function LibrarySidebar({
       {items.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
-          className={activeFilter === id ? "nav-item active" : "nav-item"}
+          className={(id === "favorites" ? favoriteOnly : id === "missing" ? missingOnly : id === "all" ? activeFilter === "all" && !favoriteOnly && !missingOnly : activeFilter === id) ? "nav-item active" : "nav-item"}
           onClick={() => onFilterChange(id)}
         >
           <Icon size={15} aria-hidden="true" />
@@ -213,6 +218,7 @@ export function LibrarySidebar({
                 );
               })}
             </div>
+            {directoryPanel}
             {isFolderManagerOpen && (
               <div className="folder-manager-backdrop" role="presentation">
                 <section
@@ -329,7 +335,7 @@ export function LibrarySidebar({
                 管理
               </button>
             </div>
-            <div className="folder-list">
+            {categoryPanel ?? <div className="folder-list">
               {tags.map((tag) => (
                 <div
                   className="folder-row"
@@ -343,7 +349,7 @@ export function LibrarySidebar({
                   <span className="collection-count">{tag.asset_count}</span>
                 </div>
               ))}
-            </div>
+            </div>}
             {isTagManagerOpen && (
               <TagManager
                 tags={tags}
@@ -434,6 +440,7 @@ export function LibrarySidebar({
                 ["reveal_folder", "打开所在目录"] as const,
                 ["copy_path", "复制路径"] as const,
                 ["preview_media", "媒体预览"] as const,
+                ["preview_image", "原图快看"] as const,
               ].map(([value, label]) => (
                 <button
                   key={value}

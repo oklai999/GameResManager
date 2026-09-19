@@ -1,3 +1,4 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Heart } from "lucide-react";
 import type { Asset, RecentActionType, RecentActivityItem } from "../types/asset";
@@ -7,6 +8,7 @@ const ACTION_LABELS: Record<RecentActionType, string> = {
   reveal_folder: "打开所在目录",
   copy_path: "复制路径",
   preview_media: "媒体预览",
+  preview_image: "原图快看",
 };
 
 type Props = {
@@ -62,6 +64,7 @@ function buildSummary(item: RecentActivityItem): string {
   if (item.reveal_folder_count > 0) parts.push(`打开所在目录 ${item.reveal_folder_count}`);
   if (item.copy_path_count > 0) parts.push(`复制路径 ${item.copy_path_count}`);
   if (item.preview_media_count > 0) parts.push(`媒体预览 ${item.preview_media_count}`);
+  if (item.preview_image_count) parts.push(`原图快看 ${item.preview_image_count}`);
   return parts.join(" · ") || ACTION_LABELS[item.latest_action_type];
 }
 
@@ -120,6 +123,7 @@ export function RecentActivityTimeline({
                 }}
                 aria-label={`选择 ${item.asset.file_name}`}
               >
+                {!isMissing && item.asset.thumbnail_status === "ready" && item.asset.thumbnail_path && <img className="recent-thumbnail" src={convertFileSrc(item.asset.thumbnail_path)} alt="" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />}
                 <div className="recent-activity-card-header">
                   <span className="recent-activity-file-name">{item.asset.file_name}</span>
                   {item.asset.is_favorite && (

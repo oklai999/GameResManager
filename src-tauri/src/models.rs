@@ -66,8 +66,8 @@ pub struct RecentAssetAction {
     pub created_at: String,
 }
 
-pub const RECENT_ACTION_TYPES: [&str; 4] = [
-    "open_file", "reveal_folder", "copy_path", "preview_media",
+pub const RECENT_ACTION_TYPES: [&str; 5] = [
+    "open_file", "reveal_folder", "copy_path", "preview_media", "preview_image",
 ];
 
 pub fn validate_recent_action_type(value: &str) -> anyhow::Result<()> {
@@ -80,6 +80,8 @@ pub fn validate_recent_action_type(value: &str) -> anyhow::Result<()> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentActivityRequest {
+    #[serde(default)]
+    pub query: String,
     pub period: String,
     pub action_type: String,
     pub limit: i64,
@@ -96,6 +98,7 @@ pub struct RecentActivityItem {
     pub reveal_folder_count: i64,
     pub copy_path_count: i64,
     pub preview_media_count: i64,
+    pub preview_image_count: i64,
     pub actions: Vec<RecentAssetAction>,
 }
 
@@ -199,8 +202,10 @@ pub struct AssetPathVariants {
     pub godot_res_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AssetSearchRequest {
+    #[serde(default)]
+    pub discovery: DiscoveryFilter,
     pub query: String,
     pub search_file_name: bool,
     pub search_note: bool,
@@ -233,3 +238,18 @@ pub struct AssetSearchResponse {
     pub offset: i64,
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiscoveryFilter {
+    pub directory_path: Option<String>,
+    pub recursive: bool,
+    pub tag_ids: Vec<i64>,
+    pub excluded_tag_ids: Vec<i64>,
+    pub unclassified: bool,
+}
+impl Default for DiscoveryFilter {
+    fn default() -> Self { Self { directory_path: None, recursive: true, tag_ids: vec![], excluded_tag_ids: vec![], unclassified: false } }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FacetTag { pub id: i64, pub name: String, pub color: String, pub dimension: String, pub asset_count: i64 }

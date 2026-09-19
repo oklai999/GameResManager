@@ -142,6 +142,9 @@ async fn persist_batch(
         for asset in batch {
             if let Some((size, modified, was_missing, thumb_status)) = existing.get(&asset.absolute_path) {
                 if *size == asset.file_size && *modified == asset.modified_at {
+                    // Classification may improve even when the source bytes did not change.
+                    sqlx::query("UPDATE assets SET asset_type = ? WHERE absolute_path = ? AND asset_type != ?")
+                        .bind(&asset.asset_type).bind(&asset.absolute_path).bind(&asset.asset_type).execute(&mut *tx).await?;
                     counters.unchanged += 1;
                     let needs_thumbnail_backfill = asset.thumbnail_status != THUMBNAIL_STATUS_NONE
                         && thumb_status.as_deref() != Some("ready");
@@ -447,7 +450,7 @@ pub async fn run_scan_job(
                 .unwrap_or_default()
                 .to_ascii_lowercase();
 
-            if asset_type == AssetType::Other || !asset_type_allowed(asset_type.as_str(), &extension, &settings) || should_ignore_extension(&extension, &settings) {
+            if (asset_type == AssetType::Other && !matches!(extension.as_str(), "json" | "atlas")) || !asset_type_allowed(asset_type.as_str(), &extension, &settings) || should_ignore_extension(&extension, &settings) {
                 counters.skipped += 1;
                 continue;
             }
@@ -515,6 +518,27 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let pool = crate::db::connect(&db_path).await.unwrap();
         (pool, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn rescanning_ambiguous_json_corrects_type_without_losing_index_or_manual_data() {
+        let (pool,dir)=setup_test_db().await;
+        let folder=create_test_folder(&pool,&dir,"assets").await;
+        write_file(std::path::Path::new(&folder.path),"settings.json",br#"{"scale":2}"#);
+        let job=crate::db::create_scan_job(&pool,folder.id).await.unwrap();
+        run_scan_job(pool.clone(),ScanRuntime::default(),dir.path().join("thumbs"),folder.id,job.id).await.unwrap();
+        let first=crate::db::list_assets(&pool,10,0).await.unwrap();
+        assert_eq!(first.len(),1);assert_eq!(first[0].asset_type,"other");
+        let id=first[0].id;
+        crate::db::apply_tag_to_assets(&pool,"人工标签",&[id]).await.unwrap();
+        sqlx::query("UPDATE assets SET asset_type='spine',is_favorite=1,note='保留备注' WHERE id=?").bind(id).execute(&pool).await.unwrap();
+        let job=crate::db::create_scan_job(&pool,folder.id).await.unwrap();
+        run_scan_job(pool.clone(),ScanRuntime::default(),dir.path().join("thumbs"),folder.id,job.id).await.unwrap();
+        let asset=crate::db::get_asset_by_id(&pool,id).await.unwrap().unwrap();
+        assert_eq!(asset.asset_type,"other");assert!(!asset.is_missing);assert!(asset.is_favorite);assert_eq!(asset.note,"保留备注");
+        assert_eq!(crate::db::list_asset_tags(&pool,id).await.unwrap(),vec!["人工标签"]);
+        assert_eq!(std::fs::read(std::path::Path::new(&folder.path).join("settings.json")).unwrap(),br#"{"scale":2}"#);
+        pool.close().await;
     }
 
     async fn create_test_folder(db: &SqlitePool, base: &tempfile::TempDir, name: &str) -> crate::models::LibraryFolder {
@@ -1173,6 +1197,7 @@ mod tests {
         run_scan_job(db.clone(), ScanRuntime::default(), tmp.path().join("thumbs"), folder.id, job.id).await.unwrap();
 
         let req = crate::models::AssetSearchRequest {
+            discovery: Default::default(),
             query: "hero".to_string(),
             search_file_name: true,
             search_note: false,
@@ -1232,6 +1257,7 @@ mod tests {
 
         // Search by note prefix via production search
         let req = crate::models::AssetSearchRequest {
+            discovery: Default::default(),
             query: "主角".to_string(),
             search_file_name: false,
             search_note: true,

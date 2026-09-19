@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -125,6 +125,7 @@ vi.mock("./api/tauri", () => ({
 }));
 
 import * as tauri from "./api/tauri";
+import * as discoveryApi from "./api/discovery";
 
 describe("App recent activity race conditions", () => {
   it("resets loadingMore when a stale load-more request is superseded by a filter change", async () => {
@@ -189,4 +190,87 @@ describe("App recent activity race conditions", () => {
       expect(button).toHaveTextContent("加载更多");
     });
   });
+});
+
+
+describe("resource discovery flow", () => {
+  async function setupLibrary() {
+    vi.clearAllMocks();
+    const asset = { ...createAsset(1, "archer.png"), asset_type: "image" as const };
+    vi.mocked(tauri.listAssets).mockResolvedValue([asset]);
+    vi.mocked(tauri.listLibraryFolders).mockResolvedValue([{ id: 1, name: "素材包", path: "C:/assets", created_at: "", last_scanned_at: "", is_enabled: true }]);
+    vi.mocked(tauri.listCollections).mockResolvedValue([{ id: 7, name: "候选", description: "", asset_count: 1 }]);
+    vi.mocked(tauri.searchAssetsPage).mockResolvedValue({ assets: [asset], total_count: 1, limit: 200, offset: 0 });
+    vi.mocked(tauri.listRecentActivity).mockResolvedValue({ items: [], total_count: 0, limit: 40, offset: 0 });
+    vi.mocked(tauri.recordRecentAssetAction).mockResolvedValue(undefined);
+    render(<App />);
+    await screen.findByText("素材包");
+    return asset;
+  }
+
+  it("composes library, type, favorite and collection without clearing the query", async () => {
+    await setupLibrary();
+    await userEvent.click(screen.getByText("素材包"));
+    await userEvent.type(screen.getByPlaceholderText("搜索资源..."), "archer");
+    await userEvent.click(screen.getByLabelText("类型"));
+    await userEvent.click(screen.getByRole("button", { name: "图片" }));
+    await userEvent.click(screen.getByLabelText("资源库"));
+    await userEvent.click(screen.getByText("收藏", { selector: ".nav-item span" }));
+    await userEvent.click(screen.getByLabelText("集合"));
+    await userEvent.click(screen.getByText("候选"));
+    await waitFor(() => expect(tauri.searchAssetsPage).toHaveBeenLastCalledWith(expect.objectContaining({ query: "archer", library_folder_id: 1, collection_id: 7, asset_type: "image", is_favorite: true })));
+    await userEvent.click(screen.getByRole("button", { name: "移除筛选: 仅收藏" }));
+    await waitFor(() => expect(tauri.searchAssetsPage).toHaveBeenLastCalledWith(expect.objectContaining({ library_folder_id: 1, collection_id: 7, asset_type: "image", is_favorite: null })));
+  });
+
+  it("restores selection and query after searching recent activity", async () => {
+    await setupLibrary();
+    await userEvent.type(screen.getByPlaceholderText("搜索资源..."), "archer");
+    await userEvent.click(screen.getByRole("button", { name: "archer.png" }));
+    const calls = vi.mocked(tauri.searchAssetsPage).mock.calls.length;
+    await userEvent.click(screen.getByLabelText("最近"));
+    await userEvent.type(screen.getByLabelText("搜索最近活动"), "old");
+    await waitFor(() => expect(tauri.listRecentActivity).toHaveBeenLastCalledWith(expect.objectContaining({ query: "old", offset: 0 })));
+    await userEvent.click(screen.getByRole("button", { name: "返回上次查找" }));
+    expect(screen.getByPlaceholderText("搜索资源...")).toHaveValue("archer");
+    expect(screen.getByRole("checkbox", { name: "选择 archer.png" })).toBeChecked();
+    expect(vi.mocked(tauri.searchAssetsPage).mock.calls.length).toBe(calls);
+  });
+
+  it("combines an indexed directory with exact category filters and exclusion", async () => {
+    vi.mocked(discoveryApi.listIndexedDirectories).mockResolvedValue([{ path: "C:/assets/Archer", count: 1 }]);
+    vi.mocked(discoveryApi.listFacetTags).mockResolvedValue([{ id: 10, name: "角色", color: "#123456", dimension: "usage", asset_count: 1 }]);
+    await setupLibrary();
+    await userEvent.click(screen.getByText("素材包", { selector: ".folder-name" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Archer 1" }));
+    await waitFor(() => expect(tauri.searchAssetsPage).toHaveBeenLastCalledWith(expect.objectContaining({ discovery: expect.objectContaining({ directory_path: "C:/assets/Archer", recursive: true }) })));
+    await userEvent.click(screen.getByRole("checkbox", { name: "包含子目录" }));
+    await userEvent.click(screen.getByLabelText("标签"));
+    await userEvent.click(await screen.findByRole("button", { name: "角色 1" }));
+    await waitFor(() => expect(tauri.searchAssetsPage).toHaveBeenLastCalledWith(expect.objectContaining({ discovery: expect.objectContaining({ directory_path: "C:/assets/Archer", recursive: false, tag_ids: [10] }) })));
+    await userEvent.click(screen.getByRole("button", { name: "排除 角色" }));
+    await waitFor(() => expect(tauri.searchAssetsPage).toHaveBeenLastCalledWith(expect.objectContaining({ discovery: expect.objectContaining({ tag_ids: [], excluded_tag_ids: [10] }) })));
+    vi.mocked(discoveryApi.listFacetTags).mockResolvedValue([]);
+  });
+
+  it("records property copy only after clipboard succeeds", async () => {
+    await setupLibrary();
+    await userEvent.click(screen.getByRole("button", { name: "archer.png" }));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    fireEvent.click(await screen.findByRole("button", { name: "复制文件名" }));
+    await waitFor(() => expect(tauri.recordRecentAssetAction).toHaveBeenCalledWith(1, "copy_path"));
+    expect(writeText).toHaveBeenCalledWith("archer.png");
+    vi.mocked(tauri.recordRecentAssetAction).mockClear();
+    writeText.mockRejectedValueOnce(new Error("clipboard denied"));
+    fireEvent.click(screen.getByRole("button", { name: "复制正斜杠路径" }));
+    await screen.findByText("clipboard denied");
+    expect(tauri.recordRecentAssetAction).not.toHaveBeenCalled();
+  });
+});
+
+
+vi.mock("./api/discovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api/discovery")>();
+  return { ...actual, listFacetTags: vi.fn(async () => []), listIndexedDirectories: vi.fn(async () => []) };
 });

@@ -1,0 +1,24 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { ImageQuickLook } from "./ImageQuickLook";
+import type { Asset } from "../types/asset";
+const assets = [1, 2].map(id => ({ id, library_folder_id: 1, file_name: `${id}.png`, absolute_path: `C:/assets/${id}.png` } as Asset));
+it("records successful loads once, navigates, and restores focus on close", () => {
+  const opener = document.createElement("button"); document.body.append(opener); opener.focus();
+  const onViewed = vi.fn(), onSelect = vi.fn(), onClose = vi.fn();
+  const { unmount } = render(<ImageQuickLook assets={assets} initialId={1} folders={[]} onViewed={onViewed} onSelect={onSelect} onClose={onClose} />);
+  expect(onViewed).not.toHaveBeenCalled();
+  const img = screen.getByRole("img");
+  expect(img).toHaveAttribute("src", "http://asset-image.localhost/1");
+  fireEvent.load(img); fireEvent.load(img);
+  expect(onViewed).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
+  expect(onSelect).toHaveBeenCalledWith(2);
+  expect(screen.getByRole("img")).toHaveAttribute("src", "http://asset-image.localhost/2");
+  fireEvent.error(screen.getByRole("img"));
+  expect(screen.getByRole("alert")).toHaveTextContent("无法快看");
+  expect(onViewed).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(onClose).toHaveBeenCalled();
+  unmount(); expect(opener).toHaveFocus(); opener.remove();
+});

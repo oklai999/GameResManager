@@ -1216,6 +1216,9 @@ pub async fn list_recent_activity_at(
     if let Some(action) = &action_filter {
         count_builder.push(" AND action_type = ").push_bind(action);
     }
+    for token in request.query.split_whitespace() {
+        count_builder.push(" AND EXISTS (SELECT 1 FROM assets WHERE assets.id = recent_asset_actions.asset_id AND (instr(lower(file_name), lower(").push_bind(token).push(")) > 0 OR instr(lower(absolute_path), lower(").push_bind(token).push(")) > 0))");
+    }
     count_builder.push(") SELECT COUNT(DISTINCT asset_id) FROM filtered");
     let total_count: i64 = count_builder
         .build_query_scalar()
@@ -1233,12 +1236,15 @@ pub async fn list_recent_activity_at(
     if let Some(action) = &action_filter {
         group_builder.push(" AND action_type = ").push_bind(action);
     }
+    for token in request.query.split_whitespace() {
+        group_builder.push(" AND EXISTS (SELECT 1 FROM assets WHERE assets.id = recent_asset_actions.asset_id AND (instr(lower(file_name), lower(").push_bind(token).push(")) > 0 OR instr(lower(absolute_path), lower(").push_bind(token).push(")) > 0))");
+    }
     group_builder.push(
         ") SELECT asset_id, MAX(created_at) AS latest_action_at, COUNT(*) AS action_count, \
          SUM(action_type = 'open_file') AS open_file_count, \
          SUM(action_type = 'reveal_folder') AS reveal_folder_count, \
          SUM(action_type = 'copy_path') AS copy_path_count, \
-         SUM(action_type = 'preview_media') AS preview_media_count, \
+         SUM(action_type = 'preview_image') AS preview_image_count, SUM(action_type = 'preview_media') AS preview_media_count, \
          MAX(CASE WHEN rn = 1 THEN action_type END) AS latest_action_type \
          FROM filtered GROUP BY asset_id \
          ORDER BY latest_action_at DESC, asset_id DESC LIMIT "
@@ -1315,6 +1321,7 @@ pub async fn list_recent_activity_at(
             open_file_count: row.get::<i64, _>("open_file_count"),
             reveal_folder_count: row.get::<i64, _>("reveal_folder_count"),
             copy_path_count: row.get::<i64, _>("copy_path_count"),
+            preview_image_count: row.get::<i64, _>("preview_image_count"),
             preview_media_count: row.get::<i64, _>("preview_media_count"),
             actions: details_map.remove(&asset_id).unwrap_or_default(),
         });
@@ -2232,6 +2239,7 @@ mod recent_activity_tests {
         list_recent_activity_at(
             db,
             crate::models::RecentActivityRequest {
+                query: String::new(),
                 period: period.into(),
                 action_type: action_type.into(),
                 limit: 10,
@@ -2251,6 +2259,7 @@ mod recent_activity_tests {
         list_recent_activity_at(
             db,
             crate::models::RecentActivityRequest {
+                query: String::new(),
                 period: "all".into(),
                 action_type: "all".into(),
                 limit,
@@ -2319,6 +2328,7 @@ mod recent_activity_tests {
         let page = list_recent_activity_at(
             &db,
             crate::models::RecentActivityRequest {
+                query: String::new(),
                 period: "all".into(),
                 action_type: "all".into(),
                 limit: 20,
@@ -2429,6 +2439,33 @@ mod recent_activity_tests {
         assert_ne!(first.items[0].asset.id, second.items[0].asset.id);
         assert_eq!(first.items[0].asset.id, a);
         assert_eq!(second.items[0].asset.id, b);
+    }
+
+    #[tokio::test]
+    async fn recent_query_searches_before_pagination_and_treats_wildcards_literally() {
+        let db = setup_db().await;
+        let wanted = insert_asset(&db, "角色_100%.wav", false).await;
+        seed_action(&db, wanted, "preview_image", "2026-06-12T10:00:00Z").await;
+        for i in 0..45 {
+            let id = insert_asset(&db, &format!("other{}.wav", i), false).await;
+            seed_action(&db, id, "open_file", "2026-06-13T10:00:00Z").await;
+        }
+        let request = crate::models::RecentActivityRequest { query: "assets 角色 100%".into(), period: "all".into(), action_type: "all".into(), limit: 40, offset: 0 };
+        let page = list_recent_activity_at(&db, request, "2026-06-13T12:00:00Z").await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.items[0].asset.id, wanted);
+        assert_eq!(page.items[0].preview_image_count, 1);
+    }
+
+    #[tokio::test]
+    async fn image_activity_migration_preserves_existing_events_and_foreign_keys() {
+        let db = setup_db().await;
+        let id = insert_asset(&db, "old.wav", false).await;
+        seed_action(&db, id, "copy_path", "2026-06-13T10:00:00Z").await;
+        sqlx::raw_sql(include_str!("../migrations/0010_image_preview_activity.sql")).execute(&db).await.unwrap();
+        assert_eq!(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM recent_asset_actions").fetch_one(&db).await.unwrap(), 1);
+        seed_action(&db, id, "preview_image", "2026-06-13T11:00:00Z").await;
+        assert!(record_recent_asset_action_at(&db, id + 999, "preview_image", "2026-06-13T11:00:00Z").await.is_err());
     }
 
     #[tokio::test]
@@ -2832,6 +2869,7 @@ mod fts_tests {
 
         // Verify FTS backfill via production search
         let req = crate::models::AssetSearchRequest {
+            discovery: Default::default(),
             query: "hero".to_string(),
             search_file_name: true,
             search_note: false,

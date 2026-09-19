@@ -9,6 +9,8 @@ type Chip = {
 
 type Props = {
   filters: AssetSearchFilters;
+  extraChips?: Chip[];
+  onClearAll?: () => void;
   scope: SearchScope;
   onFiltersChange: (filters: AssetSearchFilters) => void;
   onScopeChange: (scope: SearchScope) => void;
@@ -16,11 +18,13 @@ type Props = {
 
 export function ActiveFilterChips({
   filters,
+  extraChips = [],
+  onClearAll,
   scope,
   onFiltersChange,
   onScopeChange,
 }: Props) {
-  const chips: Chip[] = [];
+  const chips: Chip[] = [...extraChips];
 
   if (!scope.fileName) {
     chips.push({
@@ -121,6 +125,7 @@ export function ActiveFilterChips({
 
   return (
     <div className="filter-chips" role="list" aria-label="活跃筛选">
+      {onClearAll && <button onClick={onClearAll}>清除全部条件</button>}
       {chips.map((chip) => (
         <span
           key={chip.id}

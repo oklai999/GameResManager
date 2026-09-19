@@ -225,11 +225,7 @@ This project manages user-owned local asset folders. Keep these rules intact:
 
 ## Contributing
 
-This is an early local-first desktop project. Before changing behavior, preserve the source-file safety boundary and run the relevant checks:
-
-- Frontend or TypeScript changes: `npm test` and `npm run build`
-- Rust backend changes: `cargo test` and `cargo check` in `src-tauri`
-- Scan, thumbnail, path, or file-action changes: also follow [tests/smoke/README.md](tests/smoke/README.md)
+This is a local-first desktop project. Preserve the source-file safety boundary and select checks using [AGENTS.md — 验证要求](AGENTS.md#验证要求), the project's validation policy. Use the relevant sections of [tests/smoke/README.md](tests/smoke/README.md) when that policy calls for manual smoke checks. Historical test counts above are records, not current verification evidence.
 
 ## License
 

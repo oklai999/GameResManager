@@ -76,6 +76,7 @@ export type AssetSearchSort = {
 };
 
 export type AssetSearchRequest = {
+  discovery?: import("../api/discovery").DiscoveryFilter;
   query: string;
   search_file_name: boolean;
   search_note: boolean;
@@ -110,7 +111,7 @@ export type AssetSearchResponse = {
 export type RecentAssetAction = {
   id: number;
   asset_id: number;
-  action_type: "open_file" | "reveal_folder" | "copy_path" | "preview_media";
+  action_type: "open_file" | "reveal_folder" | "copy_path" | "preview_media" | "preview_image";
   created_at: string;
 };
 
@@ -118,11 +119,12 @@ export type RecentActionType =
   | "open_file"
   | "reveal_folder"
   | "copy_path"
-  | "preview_media";
+  | "preview_media" | "preview_image";
 
 export type RecentActivityPeriod = "all" | "today" | "week";
 
 export type RecentActivityRequest = {
+  query?: string;
   period: RecentActivityPeriod;
   action_type: "all" | RecentActionType;
   limit: number;
@@ -138,6 +140,7 @@ export type RecentActivityItem = {
   reveal_folder_count: number;
   copy_path_count: number;
   preview_media_count: number;
+  preview_image_count?: number;
   actions: RecentAssetAction[];
 };
 

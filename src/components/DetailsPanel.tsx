@@ -20,7 +20,9 @@ type Props = {
   onAddToCollection: (collectionId: number, assetIds: number[]) => void;
   onUpdateNote?: (asset: Asset) => void;
   recentTags?: string[];
-  onCopyText?: (text: string) => void;
+  onCopyText?: (text: string, asset?: Asset) => void;
+  onQuickLook?: (asset: Asset) => void;
+  onBrowseDirectory?: (asset: Asset) => void;
   projectRoot?: string;
   onProjectRootChange?: (root: string) => void;
   activeCollectionId: number | null;
@@ -72,12 +74,15 @@ export function DetailsPanel({
   onUpdateNote,
   recentTags = [],
   onCopyText,
+  onQuickLook,
+  onBrowseDirectory,
   projectRoot,
   onProjectRootChange,
   activeCollectionId,
   onRemoveFromCollection,
   onMediaPlaybackStarted,
 }: Props) {
+  const copyText = (text: string) => onCopyText?.(text, selectedAssets[0]);
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
@@ -218,6 +223,7 @@ export function DetailsPanel({
       </div>
       <div className="inspector-scroll">
         <div className="detail-preview">
+          {asset.asset_type === "image" && !asset.is_missing && <button onClick={() => onQuickLook?.(asset)}>原图快看 (空格)</button>}
           {!asset.is_missing && isSupportedMedia(asset) ? (
             <MediaPreview asset={asset} onPlaybackStarted={onMediaPlaybackStarted} />
           ) : canPreview ? (
@@ -231,6 +237,7 @@ export function DetailsPanel({
         ) : (
           <section className="inspector-section">
             <div className="section-title">属性</div>
+            {onBrowseDirectory && <button onClick={() => onBrowseDirectory(asset)}>在应用中查看同目录资源</button>}
             <div className="detail-grid">
               <span>类型</span><strong>{asset.asset_type}</strong>
               <span>大小</span><strong>{formatFileSize(asset.file_size)}</strong>
@@ -246,10 +253,10 @@ export function DetailsPanel({
             {onCopyText && (
               <>
                 <div className="path-variant-actions">
-                  <button onClick={() => onCopyText(asset.absolute_path)}>复制绝对路径</button>
-                  <button onClick={() => onCopyText(asset.absolute_path.replace(/\\/g, "/"))}>复制正斜杠路径</button>
-                  <button onClick={() => onCopyText(getFolderPath(asset.absolute_path))}>复制文件夹路径</button>
-                  <button onClick={() => onCopyText(asset.file_name)}>复制文件名</button>
+                  <button onClick={() => copyText(asset.absolute_path)}>复制绝对路径</button>
+                  <button onClick={() => copyText(asset.absolute_path.replace(/\\/g, "/"))}>复制正斜杠路径</button>
+                  <button onClick={() => copyText(getFolderPath(asset.absolute_path))}>复制文件夹路径</button>
+                  <button onClick={() => copyText(asset.file_name)}>复制文件名</button>
                 </div>
                 <div className="project-root-row">
                   <input
@@ -263,7 +270,7 @@ export function DetailsPanel({
                 {projectRoot?.trim() && (
                   <div className="path-variant-actions">
                     {pathVariants?.godot_res_path ? (
-                      <button onClick={() => onCopyText(pathVariants.godot_res_path!)}>复制 res:// 路径</button>
+                      <button onClick={() => copyText(pathVariants.godot_res_path!)}>复制 res:// 路径</button>
                     ) : (
                       <span className="muted">不在项目根目录下</span>
                     )}

@@ -1,8 +1,10 @@
 mod commands;
+mod discovery;
 mod db;
 mod file_actions;
 mod indexer;
 pub mod media;
+mod image_preview;
 mod models;
 mod scan_service;
 mod search;
@@ -46,6 +48,15 @@ pub fn run() {
                 });
             },
         )
+        .register_asynchronous_uri_scheme_protocol("asset-image", |context, request, responder| {
+            let Some(pool) = context.app_handle().try_state::<SqlitePool>().map(|pool| pool.inner().clone()) else {
+                responder.respond(tauri::http::Response::builder().status(503).body(Vec::<u8>::new()).unwrap());
+                return;
+            };
+            tauri::async_runtime::spawn(async move {
+                responder.respond(image_preview::handle_request(&pool, request).await);
+            });
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -90,6 +101,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            discovery::list_indexed_directories,
+            discovery::list_facet_tags,
+            discovery::save_category_tag,
+            discovery::list_classification_rules,
+            discovery::save_classification_rule,
+            discovery::preview_classification_rule,
+            discovery::apply_classification_rule,
+            discovery::list_classification_batches,
+            discovery::undo_classification_batch,
             commands::list_assets,
             commands::list_library_folders,
             commands::set_asset_favorite,
